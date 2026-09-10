@@ -1,0 +1,10 @@
+.env
+data/raw/
+data/normalized/
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+agent_triage/
+ENV/

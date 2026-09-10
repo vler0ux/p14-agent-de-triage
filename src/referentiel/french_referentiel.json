@@ -1,0 +1,235 @@
+{
+  "meta": {
+    "nom": "Référentiel de triage FRENCH — sous-ensemble structuré pour détection automatique",
+    "source": "Société Française de Médecine d'Urgence (SFMU) — FRench Emergency Nurses Classification in Hospital (FRENCH), V1.1, juin 2018",
+    "source_url": "https://www.sfmu.org/upload/referentielsSFMU/2018%2006%2010%20FRENCH%20pour%20PDF%20A4%20V1.1%20site.pdf",
+    "avertissement": "Ce fichier est un sous-ensemble NON EXHAUSTIF du référentiel officiel, restructuré pour un usage informatique dans le cadre du POC CHSA. Il couvre en priorité les motifs et seuils associés aux niveaux Tri 1 et Tri 2 (urgence maximale). Doit être complété et validé par un professionnel de santé avant tout usage en conditions réelles. Vérifier l'existence d'une version plus récente du référentiel avant mise en production.",
+    "niveaux_french": ["1", "2", "3A", "3B", "4", "5"],
+    "ordre_urgence": {"1": 1, "2": 2, "3A": 3, "3B": 4, "4": 5, "5": 6},
+    "delais_prise_en_charge_medicale": {
+      "1": "Sans délai",
+      "2": "< 20 min (infirmier < 10 min)",
+      "3A": "< 60 min",
+      "3B": "< 90 min",
+      "4": "< 120 min",
+      "5": "< 240 min"
+    },
+    "mapping_categories_brief": {
+      "urgence_maximale": ["1", "2"],
+      "moderee": ["3A", "3B"],
+      "differee": ["4", "5"]
+    }
+  },
+
+  "constantes_vitales_adulte": {
+    "unite_note": "Seuils déclenchant un niveau de tri minimal, indépendamment du motif de recours",
+    "pression_arterielle_systolique_mmHg": [
+      {"condition": "< 70", "tri_minimal": "1"},
+      {"condition": "70-90, ou 90-100 avec FC > 100/min", "tri_minimal": "2"},
+      {"condition": "> 90 (hors association ci-dessus)", "tri_minimal": "3A"}
+    ],
+    "frequence_cardiaque_min": [
+      {"condition": "> 180 ou < 40", "tri_minimal": "1"},
+      {"condition": "130-180", "tri_minimal": "2"},
+      {"condition": "< 130 (hors bradycardie sévère)", "tri_minimal": "3A"}
+    ],
+    "spo2_pourcent": [
+      {"condition": "< 86", "tri_minimal": "1"},
+      {"condition": "86-90", "tri_minimal": "2"},
+      {"condition": "> 90", "tri_minimal": "3A"}
+    ],
+    "frequence_respiratoire_min": [
+      {"condition": "> 40", "tri_minimal": "1"},
+      {"condition": "30-40", "tri_minimal": "2"}
+    ],
+    "glycemie_mmol_l": [
+      {"condition": "<= 20 avec cétose > 2 mmol/l", "tri_minimal": "1"},
+      {"condition": "> 20 avec cétose positive ou nulle", "tri_minimal": "3A"}
+    ],
+    "glasgow_gcs": [
+      {"condition": "<= 8", "tri_minimal": "1"},
+      {"condition": "9-13", "tri_minimal": "2"},
+      {"condition": "14 (normal proche)", "tri_minimal": "3A"}
+    ]
+  },
+
+  "constantes_vitales_pediatrie": {
+    "unite_note": "Seuils indicatifs de tachycardie/hypotension/polypnée par tranche d'âge — à affiner avec un pédiatre avant usage",
+    "tranches_age": [
+      {
+        "age": "< 1 mois",
+        "pas_hypotension_mmHg": "< 50",
+        "fc_tachycardie_min": "> 180",
+        "fr_polypnee_min": "> 60"
+      },
+      {
+        "age": "1 mois - 2 ans",
+        "pas_hypotension_mmHg": "< 65",
+        "fc_tachycardie_min": "> 160",
+        "fr_polypnee_min": "> 40"
+      },
+      {
+        "age": "2 - 10 ans",
+        "pas_hypotension_mmHg": "< 70",
+        "fc_tachycardie_min": "> 130",
+        "fr_polypnee_min": "> 30"
+      },
+      {
+        "age": "> 10 ans",
+        "pas_hypotension_mmHg": "< 80",
+        "fc_tachycardie_min": "> 120",
+        "fr_polypnee_min": "> 20"
+      }
+    ],
+    "regles_specifiques": [
+      {
+        "id": "fievre_nourrisson_3_mois",
+        "condition": "fièvre ET âge <= 3 mois",
+        "tri_force": "2",
+        "commentaire": "Red flag absolu quel que soit le reste du tableau clinique"
+      },
+      {
+        "id": "diarrhee_vomissements_nourrisson_6_mois",
+        "condition": "diarrhée ou vomissements ET âge <= 6 mois",
+        "tri_force": "3B"
+      }
+    ]
+  },
+
+  "motifs": [
+    {
+      "id": "arret_cardiorespiratoire",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Arrêt cardio-respiratoire",
+      "tri_base": "1",
+      "modulateurs": []
+    },
+    {
+      "id": "hypotension_arterielle",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Hypotension artérielle",
+      "tri_base": "3A",
+      "modulateurs": [
+        {"critere": "PAS <= 70 mmHg", "tri": "1"},
+        {"critere": "PAS <= 90 mmHg, ou PAS <= 100 avec FC > 100/min", "tri": "2"},
+        {"critere": "PAS 90-100 mmHg avec FC <= 100/min", "tri": "3A"}
+      ]
+    },
+    {
+      "id": "douleur_thoracique_sca",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Douleur thoracique / suspicion syndrome coronarien aigu",
+      "tri_base": "3B",
+      "modulateurs": [
+        {"critere": "ECG anormal typique de SCA", "tri": "2"},
+        {"critere": "ECG anormal non typique de SCA", "tri": "3A"},
+        {"critere": "ECG normal + comorbidité coronarienne (antécédents, FDR)", "tri": "3A"},
+        {"critere": "ECG normal + douleur de type coronaire", "tri": "3B"},
+        {"critere": "ECG normal + douleur atypique", "tri": "3B"}
+      ]
+    },
+    {
+      "id": "detresse_respiratoire_dyspnee",
+      "specialite": "respiratoire",
+      "libelle": "Dyspnée / insuffisance respiratoire",
+      "tri_base": "3A",
+      "modulateurs": [
+        {"critere": "Détresse respiratoire, ou FR >= 40/min, ou SpO2 < 86%", "tri": "2"},
+        {"critere": "Dyspnée à la parole / tirage / orthopnée, ou FR 30-40, ou SpO2 86-90%", "tri": "3A"}
+      ]
+    },
+    {
+      "id": "alteration_conscience_coma",
+      "specialite": "neurologie",
+      "libelle": "Altération de la conscience / coma",
+      "tri_base": "3A",
+      "modulateurs": [
+        {"critere": "GCS <= 8", "tri": "2"},
+        {"critere": "GCS 9-13, avis référent médical", "tri": "3A"}
+      ]
+    },
+    {
+      "id": "deficit_neurologique_avc",
+      "specialite": "neurologie",
+      "libelle": "Déficit moteur, sensitif, sensoriel ou du langage / suspicion AVC",
+      "tri_base": "3A",
+      "modulateurs": [
+        {"critere": "Délai depuis apparition <= 4h30 (fenêtre thrombolyse)", "tri": "2"},
+        {"critere": "Délai >= 12h, ou avis référent médical", "tri": "3A"}
+      ]
+    },
+    {
+      "id": "cephalee",
+      "specialite": "neurologie",
+      "libelle": "Céphalée",
+      "tri_base": "3B",
+      "modulateurs": [
+        {"critere": "Inhabituelle (premier épisode, brutale, intense) ou fièvre associée", "tri": "3A"},
+        {"critere": "Habituelle / migraine connue", "tri": "3B"}
+      ]
+    },
+    {
+      "id": "idee_comportement_suicidaire",
+      "specialite": "psychiatrie",
+      "libelle": "Idée ou comportement suicidaire",
+      "tri_base": "3B",
+      "modulateurs": [
+        {"critere": "Passage à l'acte ou risque imminent", "tri": "2"}
+      ]
+    },
+    {
+      "id": "hemorragie_digestive",
+      "specialite": "abdominal",
+      "libelle": "Hématémèse / rectorragies abondantes",
+      "tri_base": "2",
+      "modulateurs": [
+        {"critere": "Hématémèse ou rectorragie abondante", "tri": "2"},
+        {"critere": "Vomissement(s) strié(s) de sang / selles souillées de sang", "tri": "3A"}
+      ]
+    },
+    {
+      "id": "traumatisme_amputation",
+      "specialite": "traumatologie",
+      "libelle": "Traumatisme avec amputation",
+      "tri_base": "1",
+      "modulateurs": []
+    },
+    {
+      "id": "traumatisme_penetrant_tronc",
+      "specialite": "traumatologie",
+      "libelle": "Traumatisme abdomen / thorax / cervical",
+      "tri_base": "3A",
+      "modulateurs": [
+        {"critere": "Pénétrant, haute vélocité", "tri": "2"},
+        {"critere": "Faible vélocité et mauvaise tolérance", "tri": "3A"}
+      ]
+    },
+    {
+      "id": "accouchement_imminent",
+      "specialite": "gyneco_obstetrique",
+      "libelle": "Accouchement imminent ou réalisé",
+      "tri_base": "1",
+      "modulateurs": []
+    },
+    {
+      "id": "intoxication_medicamenteuse",
+      "specialite": "intoxication",
+      "libelle": "Intoxication médicamenteuse",
+      "tri_base": "3B",
+      "modulateurs": [
+        {"critere": "Mauvaise tolérance, intention suicidaire, ou toxique cardiotrope/lésionnel", "tri": "3A"},
+        {"critere": "Pas de mauvaise tolérance et prise en charge tardive (>= 24h)", "tri": "3B"}
+      ]
+    },
+    {
+      "id": "convulsions",
+      "specialite": "neurologie",
+      "libelle": "Convulsions",
+      "tri_base": "3A",
+      "modulateurs": [
+        {"critere": "Crises multiples ou en cours, confusion, déficit ou fièvre", "tri": "3A"},
+        {"critere": "Récupération complète post-critique", "tri": "3B"}
+      ]
+    }
+  ]
+}
