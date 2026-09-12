@@ -187,12 +187,21 @@
         {"critere": "Vomissement(s) strié(s) de sang / selles souillées de sang", "tri": "3A"}
       ]
     },
-    {
-      "id": "traumatisme_amputation",
+        {
+      "id": "traumatisme_amputation_membre",
       "specialite": "traumatologie",
-      "libelle": "Traumatisme avec amputation",
+      "libelle": "Traumatisme avec amputation de membre (majeure, risque hémorragique vital)",
       "tri_base": "1",
       "modulateurs": []
+    },
+    {
+      "id": "traumatisme_amputation_digitale",
+      "specialite": "traumatologie",
+      "libelle": "Amputation digitale isolée (doigt ou orteil), section franche, patient stable",
+      "tri_base": "2",
+      "modulateurs": [
+        {"critere": "Hémorragie non contrôlée par compression simple", "tri": "1"}
+      ]
     },
     {
       "id": "traumatisme_penetrant_tronc",
@@ -221,7 +230,7 @@
         {"critere": "Pas de mauvaise tolérance et prise en charge tardive (>= 24h)", "tri": "3B"}
       ]
     },
-    {
+        {
       "id": "convulsions",
       "specialite": "neurologie",
       "libelle": "Convulsions",
@@ -229,6 +238,17 @@
       "modulateurs": [
         {"critere": "Crises multiples ou en cours, confusion, déficit ou fièvre", "tri": "3A"},
         {"critere": "Récupération complète post-critique", "tri": "3B"}
+      ]
+    },
+    {
+      "id": "diarrhee_vomissements",
+      "specialite": "digestif",
+      "libelle": "Diarrhée et/ou vomissements (motif générique, tous âges)",
+      "tri_base": "4",
+      "modulateurs": [
+        {"critere": "Signes de déshydratation sévère (yeux cernés, pli cutané persistant, troubles de conscience, oligurie marquée)", "tri": "2"},
+        {"critere": "Signes de déshydratation modérée, ou vomissements incoercibles empêchant toute réhydratation orale, ou nourrisson/jeune enfant", "tri": "3A"},
+        {"critere": "Bien toléré, pas de signe de déshydratation, patient capable de s'hydrater", "tri": "4"}
       ]
     }
   ]

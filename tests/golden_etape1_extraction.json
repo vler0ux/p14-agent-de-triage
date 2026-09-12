@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "objectif": "Jeu de cas de référence servant de critère d'acceptation pour le futur prompt de l'Étape 1 (extraction structurée du cas clinique). Une fois le prompt écrit, on pourra comparer son extraction réelle à 'extraction_attendue' pour chaque cas.",
+    "source_vignettes": "Vraies vignettes MediQAl (avec contexte clinique), déjà utilisées pour valider load_mediqal.py",
+    "format_extraction_attendue": "Correspond aux champs de la dataclass CasClinique (red_flag_detector.py) : motif_id, age_annees, pas_mmhg, fc_min, spo2_pct, fr_min, glycemie_mmol_l, gcs, fievre, criteres_presents. Les champs non mentionnés dans la vignette source restent null/false — l'Étape 1 ne doit JAMAIS inventer une donnée absente du texte."
+  },
+  "cas": [
+    {
+      "id": "mediqal_mcqm_11399",
+      "vignette_source": "Plusieurs jours après un contage avec un enfant atteint d'oreillons, une fillette de 6 ans développe un état fébrile à 40° rapidement suivi d'une parotidite unilatérale. En 48h, l'atteinte salivaire se bilatéralise et la température se normalise. Vers le 8e jour cependant, apparaissent des céphalées intenses et des vomissements.",
+      "extraction_attendue": {
+        "motif_id": "cephalee",
+        "age_annees": 6,
+        "pas_mmhg": null,
+        "fc_min": null,
+        "spo2_pct": null,
+        "fr_min": null,
+        "glycemie_mmol_l": null,
+        "gcs": null,
+        "fievre": false,
+        "criteres_presents": ["Inhabituelle (premier épisode, brutale, intense) ou fièvre associée"]
+      },
+      "justification": "Céphalées intenses de survenue brutale (premier épisode) au 8e jour d'une infection ourlienne → évoque une complication neurologique (méningite ourlienne). Motif 'cephalee' avec le modulateur 'inhabituelle' déclenché → Tri 3A → catégorie 'modérée'. Remarque : la fièvre s'était normalisée avant l'apparition des céphalées, donc fievre=false au moment du motif de recours.",
+      "point_de_vigilance": null
+    },
+    {
+      "id": "mediqal_mcqm_16235",
+      "vignette_source": "Monsieur D., 59 ans, cafetier, consulte pour des douleurs thoraciques. Elles débutent par les deux bras et envahissent le thorax antérieur, puis postérieur ; leur tonalité est constrictive : elles augmentent progressivement en intensité et en diffusion jusqu'à un maximum où elles s'accompagnent souvent d'un malaise.",
+      "extraction_attendue": {
+        "motif_id": "douleur_thoracique_sca",
+        "age_annees": 59,
+        "pas_mmhg": null,
+        "fc_min": null,
+        "spo2_pct": null,
+        "fr_min": null,
+        "glycemie_mmol_l": null,
+        "gcs": null,
+        "fievre": false,
+        "criteres_presents": []
+      },
+      "justification": "Douleur thoracique constrictive typique d'un angor. Aucun résultat d'ECG n'est donné dans la vignette source → aucun modulateur ne peut être déclenché avec certitude → on retombe sur le tri_base du motif (3B, 'modérée'). Ce cas teste que l'Étape 1 n'invente PAS un résultat d'ECG qui n'est pas dans le texte, même si le contexte est évocateur.",
+      "point_de_vigilance": null
+    },
+    {
+      "id": "mediqal_mcqm_6197",
+      "vignette_source": "Un menuisier de 25 ans, droitier, fait une fausse manoeuvre et est blessé à la main droite par une scie circulaire. [...] L'annulaire a été sectionné par le coup de scie au niveau de P2.",
+      "extraction_attendue": {
+        "motif_id": "traumatisme_amputation_digitale",
+        "age_annees": 25,
+        "pas_mmhg": null,
+        "fc_min": null,
+        "spo2_pct": null,
+        "fr_min": null,
+        "glycemie_mmol_l": null,
+        "gcs": null,
+        "fievre": false,
+        "criteres_presents": []
+      },
+      "justification": "Amputation d'un doigt (annulaire, niveau P2) par section franche.",
+      "point_de_vigilance": "CORRIGÉ : le référentiel distingue maintenant amputation digitale (tri_base=2) et amputation de membre (tri_base=1). Le résultat final reste 'urgence_maximale' dans les deux cas (Tri 1 et Tri 2 sont regroupés dans cette catégorie côté brief), mais la traçabilité interne est désormais fidèle au référentiel FRENCH."
+    },
+    {
+      "id": "mediqal_mcqm_15013",
+      "vignette_source": "Un nourrisson de 7 mois est amené par ses parents le soir du 20 décembre à la consultation d'urgence de pédiatrie. Il présentait depuis 24 heures des selles molles, mais depuis le matin il a eu 7 à 8 selles liquides. Les parents soulignent qu'il a vomi son dernier biberon.",
+      "extraction_attendue": {
+        "motif_id": null,
+        "age_annees": 0.583,
+        "pas_mmhg": null,
+        "fc_min": null,
+        "spo2_pct": null,
+        "fr_min": null,
+        "glycemie_mmol_l": null,
+        "gcs": null,
+        "fievre": false,
+        "criteres_presents": []
+      },
+      "justification": "Diarrhée aiguë (7-8 selles liquides/jour) et vomissement chez un nourrisson de 7 mois — motif de recours fréquent aux urgences pédiatriques, avec un vrai risque (déshydratation).",
+      "point_de_vigilance": "TROU DE RÉFÉRENTIEL IDENTIFIÉ, et plus important que le précédent : notre référentiel ne contient AUCUN motif générique 'diarrhée/vomissements'. La seule règle existante ('diarrhee_vomissements_nourrisson_6_mois') est bornée à <= 6 mois — ce nourrisson de 7 mois passe donc au travers de toutes nos règles de détection, alors qu'une gastro-entérite aiguë avec signes de déshydratation débutante mérite d'être évaluée cliniquement (poids, signes de déshydratation) avant d'être classée 'différée' par défaut. Ce cas montre concrètement le risque d'un référentiel encore partiel : sans motif générique pour ce type de présentation très fréquente en pédiatrie, l'Étape 2 ne peut retenir aucun red flag ici, et le label final dépendra entièrement du jugement du LLM (Étape 3) sans filet de sécurité déterministe. À traiter en priorité avant de lancer la génération à grande échelle."
+    }
+  ]
+}
