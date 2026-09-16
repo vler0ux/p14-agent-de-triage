@@ -1,4 +1,6 @@
 """
+extraction_etape1.py
+
 Étape 1 du pipeline : extraction structurée du cas clinique à partir d'une
 vignette source en texte libre, au format CasClinique (cf.
 src/referentiel/red_flag_detector.py) — c'est cette structure qui alimente
@@ -9,25 +11,38 @@ liste des motifs et de leurs critères exacts) pour que le LLM ne produise
 que des motif_id et criteres_presents réellement exploitables par l'Étape 2
 — plutôt que des libellés inventés qui ne correspondraient à rien.
 
+⚠️ Ce prompt est volumineux (~19 500 caractères / ~4 900 tokens, à cause des
+119 motifs du référentiel) — il consomme une bonne part du quota par minute
+sur Groq. Par défaut, ce script utilise Gemini plutôt que Groq (cf.
+llm_client.py), justement pour ne pas entrer en compétition avec
+filtre_pertinence.py qui tourne sur Groq. Passez --fournisseur groq si
+besoin.
+
 Règle impérative du prompt : ne jamais inventer une donnée absente du texte
 source (pas de constante vitale devinée, pas de motif forcé si aucun ne
 correspond vraiment).
 
 Usage (mode test, contre le jeu de cas de référence) :
     python extraction_etape1.py --golden ../../tests/golden_etape1_extraction.json
+
+Usage (sur de vraies vignettes filtrées, ex. depuis backups/) :
+    python extraction_etape1.py --input /chemin/vers/vignettes_urgences.jsonl \
+        --output ../../data/normalized/mediqal_mcqm_extraction.jsonl --limit 20
 """
 
 import argparse
 import json
-import os
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
+sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "referentiel"))
+from llm_client import completer  # noqa: E402
 from red_flag_detector import charger_referentiel  # noqa: E402
 
 
@@ -71,24 +86,7 @@ Réponds UNIQUEMENT avec le JSON, sans texte avant ni après, sans balises markd
 """
 
 
-def extraire(client, texte_vignette: str, prompt_systeme: str, modele: str) -> dict:
-    reponse = client.chat.completions.create(
-        model=modele,
-        max_tokens=400,
-        messages=[
-            {"role": "system", "content": prompt_systeme},
-            {"role": "user", "content": f"Vignette :\n{texte_vignette}"},
-        ],
-    )
-    texte = reponse.choices[0].message.content.strip()
-    try:
-        return json.loads(texte)
-    except json.JSONDecodeError:
-        return {"_erreur_parsing": texte[:300]}
-
-
 def comparer(attendu: dict, obtenu: dict) -> dict:
-    """Compare extraction attendue vs obtenue, champ par champ."""
     champs = ["motif_id", "age_annees", "fievre"]
     resultat = {}
     for champ in champs:
@@ -101,36 +99,20 @@ def comparer(attendu: dict, obtenu: dict) -> dict:
     return resultat
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Étape 1 : extraction structurée — mode test sur le jeu de référence")
-    parser.add_argument("--golden", default=str(Path(__file__).parent.parent.parent / "tests" / "golden_etape1_extraction.json"))
-    parser.add_argument("--modele", default="openai/gpt-oss-20b")
-    args = parser.parse_args()
-
-    from groq import Groq
-
-    api_key = os.environ.get("GROQ_API_KEY")
-    if not api_key:
-        print("GROQ_API_KEY manquant dans .env", file=sys.stderr)
-        sys.exit(1)
-    client = Groq(api_key=api_key)
-
-    ref_path = Path(__file__).parent.parent / "referentiel" / "french_referentiel.json"
-    referentiel = charger_referentiel(str(ref_path))
-    prompt_systeme = construire_prompt_systeme(referentiel)
-
-    with open(args.golden, encoding="utf-8") as f:
+def executer_mode_test(golden_path: str, prompt_systeme: str, fournisseur: str, modele: str, pause: float):
+    with open(golden_path, encoding="utf-8") as f:
         golden = json.load(f)
 
     n_ok, n_total = 0, 0
     for cas in golden["cas"]:
         n_total += 1
-        obtenu = extraire(client, cas["vignette_source"], prompt_systeme, args.modele)
+        obtenu = completer(prompt_systeme, f"Vignette :\n{cas['vignette_source']}", fournisseur, modele, max_tokens=2048)
         attendu = cas["extraction_attendue"]
 
         print(f"\n=== {cas['id']} ===")
         if "_erreur_parsing" in obtenu:
             print(f"❌ ERREUR DE PARSING JSON : {obtenu['_erreur_parsing']}")
+            time.sleep(pause)
             continue
 
         diff = comparer(attendu, obtenu)
@@ -149,7 +131,79 @@ def main():
             n_ok += 1
             print("  => CAS ENTIÈREMENT CORRECT")
 
+        time.sleep(pause)
+
     print(f"\n{'=' * 50}\n{n_ok}/{n_total} cas entièrement corrects (motif + âge + fièvre + critères)")
+
+
+def executer_mode_reel(input_path: str, output_path: str, prompt_systeme: str, fournisseur: str,
+                        modele: str, pause: float, limit: int):
+    vignettes = []
+    with open(input_path, encoding="utf-8") as f:
+        for ligne in f:
+            ligne = ligne.strip()
+            if ligne:
+                vignettes.append(json.loads(ligne))
+    if limit:
+        vignettes = vignettes[:limit]
+
+    print(f"{len(vignettes)} vignettes à traiter...", file=sys.stderr)
+
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    n_ok, n_erreurs = 0, 0
+    with open(output_file, "a", encoding="utf-8") as f_out:
+        for i, vignette in enumerate(vignettes, 1):
+            texte_source = vignette.get("contexte_clinique") or vignette.get("question", "")
+            extraction = completer(prompt_systeme, f"Vignette :\n{texte_source}", fournisseur, modele, max_tokens=2048)
+
+            if "_erreur_parsing" in extraction:
+                n_erreurs += 1
+            else:
+                n_ok += 1
+
+            resultat = {"id": vignette["id"], "vignette_source": texte_source, "extraction": extraction}
+            f_out.write(json.dumps(resultat, ensure_ascii=False) + "\n")
+            f_out.flush()
+
+            if i % 10 == 0 or i == len(vignettes):
+                print(f"  {i}/{len(vignettes)} traitées — {n_ok} ok, {n_erreurs} erreurs de parsing", file=sys.stderr)
+
+            time.sleep(pause)
+
+    print(f"\nTerminé : {n_ok} extractions réussies, {n_erreurs} erreurs -> {output_file}", file=sys.stderr)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Étape 1 : extraction structurée du cas clinique")
+    parser.add_argument("--golden", default=None,
+                         help="Mode test : chemin du jeu de cas de référence")
+    parser.add_argument("--input", default=None,
+                         help="Mode réel : fichier JSONL de vignettes (ex. sortie de filtre_pertinence.py)")
+    parser.add_argument("--output", default=None, help="Mode réel : fichier de sortie JSONL")
+    parser.add_argument("--limit", type=int, default=None, help="Mode réel : limiter le nombre de vignettes")
+    parser.add_argument("--fournisseur", choices=["groq", "gemini"], default="gemini",
+                         help="Défaut : gemini, pour ne pas entrer en compétition avec le quota Groq du filtre")
+    parser.add_argument("--modele", default=None,
+                         help="Défaut selon le fournisseur : gemini-3.6-flash ou openai/gpt-oss-20b")
+    parser.add_argument("--pause", type=float, default=3.0)
+    args = parser.parse_args()
+
+    modele = args.modele or ("gemini-3.6-flash" if args.fournisseur == "gemini" else "openai/gpt-oss-20b")
+
+    ref_path = Path(__file__).parent.parent / "referentiel" / "french_referentiel.json"
+    referentiel = charger_referentiel(str(ref_path))
+    prompt_systeme = construire_prompt_systeme(referentiel)
+
+    if args.input:
+        if not args.output:
+            print("--output est requis avec --input", file=sys.stderr)
+            sys.exit(1)
+        executer_mode_reel(args.input, args.output, prompt_systeme, args.fournisseur, modele, args.pause, args.limit)
+    else:
+        golden_path = args.golden or str(Path(__file__).parent.parent.parent / "tests" / "golden_etape1_extraction.json")
+        executer_mode_test(golden_path, prompt_systeme, args.fournisseur, modele, args.pause)
 
 
 if __name__ == "__main__":

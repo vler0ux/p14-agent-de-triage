@@ -4,8 +4,22 @@
     "source": "Société Française de Médecine d'Urgence (SFMU) — FRench Emergency Nurses Classification in Hospital (FRENCH), V1.1, juin 2018",
     "source_url": "https://www.sfmu.org/upload/referentielsSFMU/2018%2006%2010%20FRENCH%20pour%20PDF%20A4%20V1.1%20site.pdf",
     "avertissement": "Ce fichier est un sous-ensemble NON EXHAUSTIF du référentiel officiel, restructuré pour un usage informatique dans le cadre du POC CHSA. Il couvre en priorité les motifs et seuils associés aux niveaux Tri 1 et Tri 2 (urgence maximale). Doit être complété et validé par un professionnel de santé avant tout usage en conditions réelles. Vérifier l'existence d'une version plus récente du référentiel avant mise en production.",
-    "niveaux_french": ["1", "2", "3A", "3B", "4", "5"],
-    "ordre_urgence": {"1": 1, "2": 2, "3A": 3, "3B": 4, "4": 5, "5": 6},
+    "niveaux_french": [
+      "1",
+      "2",
+      "3A",
+      "3B",
+      "4",
+      "5"
+    ],
+    "ordre_urgence": {
+      "1": 1,
+      "2": 2,
+      "3A": 3,
+      "3B": 4,
+      "4": 5,
+      "5": 6
+    },
     "delais_prise_en_charge_medicale": {
       "1": "Sans délai",
       "2": "< 20 min (infirmier < 10 min)",
@@ -15,44 +29,127 @@
       "5": "< 240 min"
     },
     "mapping_categories_brief": {
-      "urgence_maximale": ["1", "2"],
-      "moderee": ["3A", "3B"],
-      "differee": ["4", "5"]
-    }
+      "urgence_maximale": [
+        "1",
+        "2"
+      ],
+      "moderee": [
+        "3A",
+        "3B"
+      ],
+      "differee": [
+        "4",
+        "5"
+      ]
+    },
+    "source_complementaire": {
+      "reference": "Taboulet P, Maillard-Acker C, Ranchon G, et al. (2019) Triage des patients à l'accueil d'une structure d'urgences. Présentation de l'échelle de tri élaborée par la SFMU : la FRench Emergency Nurses Classification in Hospital (FRENCH). Ann Fr Med Urgence 9:51-59.",
+      "apport": "Article peer-reviewed décrivant la MÊME version du référentiel (V1.1, 2018) que la source technique initiale, mais avec : le thésaurus complet des motifs de recours (Tableau 2, ~114 motifs transcrits ici), des seuils de modulateurs supplémentaires (température, DEP asthme, shock index — Tableau 3), et des données de validation sur 26 892 patients réels."
+    },
+    "limitations_connues": [
+      "La règle générale de promotion Tri 3B -> 3A ('patient adressé par un médecin, ou comorbidité en rapport avec le motif') n'est PAS encore modélisée dans red_flag_detector.py — actuellement seuls les motifs déjà affinés à la main ont des modulateurs 3A/3B spécifiques. Les ~100 motifs ajoutés depuis le Tableau 2 officiel n'ont pour l'instant qu'un tri_base, sans modulateur.",
+      "Le motif pédiatrique officiel 'Diarrhée/vomissements du nourrisson (<= 24 mois)' (tri_base 3B) est présent dans la liste mais sa sélection préférentielle par rapport au motif générique adulte 'diarrhee_vomissements' pour les patients <=24 mois n'est pas encore automatisée dans le code — à gérer via le prompt de l'Étape 1 (extraction) en attendant."
+    ]
   },
-
   "constantes_vitales_adulte": {
     "unite_note": "Seuils déclenchant un niveau de tri minimal, indépendamment du motif de recours",
     "pression_arterielle_systolique_mmHg": [
-      {"condition": "< 70", "tri_minimal": "1"},
-      {"condition": "70-90, ou 90-100 avec FC > 100/min", "tri_minimal": "2"},
-      {"condition": "> 90 (hors association ci-dessus)", "tri_minimal": "3A"}
+      {
+        "condition": "< 70",
+        "tri_minimal": "1"
+      },
+      {
+        "condition": "70-90, ou 90-100 avec FC > 100/min",
+        "tri_minimal": "2"
+      },
+      {
+        "condition": "> 90 (hors association ci-dessus)",
+        "tri_minimal": "3A"
+      }
     ],
     "frequence_cardiaque_min": [
-      {"condition": "> 180 ou < 40", "tri_minimal": "1"},
-      {"condition": "130-180", "tri_minimal": "2"},
-      {"condition": "< 130 (hors bradycardie sévère)", "tri_minimal": "3A"}
+      {
+        "condition": "> 180 ou < 40",
+        "tri_minimal": "1"
+      },
+      {
+        "condition": "130-180",
+        "tri_minimal": "2"
+      },
+      {
+        "condition": "< 130 (hors bradycardie sévère)",
+        "tri_minimal": "3A"
+      }
     ],
     "spo2_pourcent": [
-      {"condition": "< 86", "tri_minimal": "1"},
-      {"condition": "86-90", "tri_minimal": "2"},
-      {"condition": "> 90", "tri_minimal": "3A"}
+      {
+        "condition": "< 86",
+        "tri_minimal": "1"
+      },
+      {
+        "condition": "86-90",
+        "tri_minimal": "2"
+      },
+      {
+        "condition": "> 90",
+        "tri_minimal": "3A"
+      }
     ],
     "frequence_respiratoire_min": [
-      {"condition": "> 40", "tri_minimal": "1"},
-      {"condition": "30-40", "tri_minimal": "2"}
+      {
+        "condition": "> 40",
+        "tri_minimal": "1"
+      },
+      {
+        "condition": "30-40",
+        "tri_minimal": "2"
+      }
     ],
     "glycemie_mmol_l": [
-      {"condition": "<= 20 avec cétose > 2 mmol/l", "tri_minimal": "1"},
-      {"condition": "> 20 avec cétose positive ou nulle", "tri_minimal": "3A"}
+      {
+        "condition": "<= 20 avec cétose > 2 mmol/l",
+        "tri_minimal": "1"
+      },
+      {
+        "condition": "> 20 avec cétose positive ou nulle",
+        "tri_minimal": "3A"
+      }
     ],
     "glasgow_gcs": [
-      {"condition": "<= 8", "tri_minimal": "1"},
-      {"condition": "9-13", "tri_minimal": "2"},
-      {"condition": "14 (normal proche)", "tri_minimal": "3A"}
+      {
+        "condition": "<= 8",
+        "tri_minimal": "1"
+      },
+      {
+        "condition": "9-13",
+        "tri_minimal": "2"
+      },
+      {
+        "condition": "14 (normal proche)",
+        "tri_minimal": "3A"
+      }
+    ],
+    "temperature_celsius": [
+      {
+        "condition": ">= 40 ou <= 35.2",
+        "tri_minimal": "1"
+      },
+      {
+        "condition": "fievre et shock_index >= 1 (FC/PAS, si PAS entre 90 et 100)",
+        "tri_minimal": "3A"
+      }
+    ],
+    "dep_asthme_l_min": [
+      {
+        "condition": "<= 200",
+        "tri_minimal": "2"
+      },
+      {
+        "condition": "<= 300",
+        "tri_minimal": "3A"
+      }
     ]
   },
-
   "constantes_vitales_pediatrie": {
     "unite_note": "Seuils indicatifs de tachycardie/hypotension/polypnée par tranche d'âge — à affiner avec un pédiatre avant usage",
     "tranches_age": [
@@ -95,7 +192,6 @@
       }
     ]
   },
-
   "motifs": [
     {
       "id": "arret_cardiorespiratoire",
@@ -108,11 +204,20 @@
       "id": "hypotension_arterielle",
       "specialite": "cardio_circulatoire",
       "libelle": "Hypotension artérielle",
-      "tri_base": "3A",
+      "tri_base": "2",
       "modulateurs": [
-        {"critere": "PAS <= 70 mmHg", "tri": "1"},
-        {"critere": "PAS <= 90 mmHg, ou PAS <= 100 avec FC > 100/min", "tri": "2"},
-        {"critere": "PAS 90-100 mmHg avec FC <= 100/min", "tri": "3A"}
+        {
+          "critere": "PAS <= 70 mmHg",
+          "tri": "1"
+        },
+        {
+          "critere": "PAS <= 90 mmHg, ou PAS <= 100 avec FC > 100/min",
+          "tri": "2"
+        },
+        {
+          "critere": "PAS 90-100 mmHg avec FC <= 100/min",
+          "tri": "3A"
+        }
       ]
     },
     {
@@ -121,41 +226,74 @@
       "libelle": "Douleur thoracique / suspicion syndrome coronarien aigu",
       "tri_base": "3B",
       "modulateurs": [
-        {"critere": "ECG anormal typique de SCA", "tri": "2"},
-        {"critere": "ECG anormal non typique de SCA", "tri": "3A"},
-        {"critere": "ECG normal + comorbidité coronarienne (antécédents, FDR)", "tri": "3A"},
-        {"critere": "ECG normal + douleur de type coronaire", "tri": "3B"},
-        {"critere": "ECG normal + douleur atypique", "tri": "3B"}
+        {
+          "critere": "ECG anormal typique de SCA",
+          "tri": "2"
+        },
+        {
+          "critere": "ECG anormal non typique de SCA",
+          "tri": "3A"
+        },
+        {
+          "critere": "ECG normal + comorbidité coronarienne (antécédents, FDR)",
+          "tri": "3A"
+        },
+        {
+          "critere": "ECG normal + douleur de type coronaire",
+          "tri": "3B"
+        },
+        {
+          "critere": "ECG normal + douleur atypique",
+          "tri": "3B"
+        }
       ]
     },
     {
       "id": "detresse_respiratoire_dyspnee",
       "specialite": "respiratoire",
       "libelle": "Dyspnée / insuffisance respiratoire",
-      "tri_base": "3A",
+      "tri_base": "3B",
       "modulateurs": [
-        {"critere": "Détresse respiratoire, ou FR >= 40/min, ou SpO2 < 86%", "tri": "2"},
-        {"critere": "Dyspnée à la parole / tirage / orthopnée, ou FR 30-40, ou SpO2 86-90%", "tri": "3A"}
+        {
+          "critere": "Détresse respiratoire, ou FR >= 40/min, ou SpO2 < 86%",
+          "tri": "2"
+        },
+        {
+          "critere": "Dyspnée à la parole / tirage / orthopnée, ou FR 30-40, ou SpO2 86-90%",
+          "tri": "3A"
+        }
       ]
     },
     {
       "id": "alteration_conscience_coma",
       "specialite": "neurologie",
       "libelle": "Altération de la conscience / coma",
-      "tri_base": "3A",
+      "tri_base": "2",
       "modulateurs": [
-        {"critere": "GCS <= 8", "tri": "2"},
-        {"critere": "GCS 9-13, avis référent médical", "tri": "3A"}
+        {
+          "critere": "GCS <= 8",
+          "tri": "2"
+        },
+        {
+          "critere": "GCS 9-13, avis référent médical",
+          "tri": "3A"
+        }
       ]
     },
     {
       "id": "deficit_neurologique_avc",
       "specialite": "neurologie",
       "libelle": "Déficit moteur, sensitif, sensoriel ou du langage / suspicion AVC",
-      "tri_base": "3A",
+      "tri_base": "2",
       "modulateurs": [
-        {"critere": "Délai depuis apparition <= 4h30 (fenêtre thrombolyse)", "tri": "2"},
-        {"critere": "Délai >= 12h, ou avis référent médical", "tri": "3A"}
+        {
+          "critere": "Délai depuis apparition <= 4h30 (fenêtre thrombolyse)",
+          "tri": "2"
+        },
+        {
+          "critere": "Délai >= 12h, ou avis référent médical",
+          "tri": "3A"
+        }
       ]
     },
     {
@@ -164,17 +302,26 @@
       "libelle": "Céphalée",
       "tri_base": "3B",
       "modulateurs": [
-        {"critere": "Inhabituelle (premier épisode, brutale, intense) ou fièvre associée", "tri": "3A"},
-        {"critere": "Habituelle / migraine connue", "tri": "3B"}
+        {
+          "critere": "Inhabituelle (premier épisode, brutale, intense) ou fièvre associée",
+          "tri": "3A"
+        },
+        {
+          "critere": "Habituelle / migraine connue",
+          "tri": "3B"
+        }
       ]
     },
     {
       "id": "idee_comportement_suicidaire",
       "specialite": "psychiatrie",
       "libelle": "Idée ou comportement suicidaire",
-      "tri_base": "3B",
+      "tri_base": "2",
       "modulateurs": [
-        {"critere": "Passage à l'acte ou risque imminent", "tri": "2"}
+        {
+          "critere": "Passage à l'acte ou risque imminent",
+          "tri": "2"
+        }
       ]
     },
     {
@@ -183,11 +330,17 @@
       "libelle": "Hématémèse / rectorragies abondantes",
       "tri_base": "2",
       "modulateurs": [
-        {"critere": "Hématémèse ou rectorragie abondante", "tri": "2"},
-        {"critere": "Vomissement(s) strié(s) de sang / selles souillées de sang", "tri": "3A"}
+        {
+          "critere": "Hématémèse ou rectorragie abondante",
+          "tri": "2"
+        },
+        {
+          "critere": "Vomissement(s) strié(s) de sang / selles souillées de sang",
+          "tri": "3A"
+        }
       ]
     },
-        {
+    {
       "id": "traumatisme_amputation_membre",
       "specialite": "traumatologie",
       "libelle": "Traumatisme avec amputation de membre (majeure, risque hémorragique vital)",
@@ -200,17 +353,26 @@
       "libelle": "Amputation digitale isolée (doigt ou orteil), section franche, patient stable",
       "tri_base": "2",
       "modulateurs": [
-        {"critere": "Hémorragie non contrôlée par compression simple", "tri": "1"}
+        {
+          "critere": "Hémorragie non contrôlée par compression simple",
+          "tri": "1"
+        }
       ]
     },
     {
       "id": "traumatisme_penetrant_tronc",
       "specialite": "traumatologie",
       "libelle": "Traumatisme abdomen / thorax / cervical",
-      "tri_base": "3A",
+      "tri_base": "2",
       "modulateurs": [
-        {"critere": "Pénétrant, haute vélocité", "tri": "2"},
-        {"critere": "Faible vélocité et mauvaise tolérance", "tri": "3A"}
+        {
+          "critere": "Pénétrant, haute vélocité",
+          "tri": "2"
+        },
+        {
+          "critere": "Faible vélocité et mauvaise tolérance",
+          "tri": "3A"
+        }
       ]
     },
     {
@@ -226,30 +388,827 @@
       "libelle": "Intoxication médicamenteuse",
       "tri_base": "3B",
       "modulateurs": [
-        {"critere": "Mauvaise tolérance, intention suicidaire, ou toxique cardiotrope/lésionnel", "tri": "3A"},
-        {"critere": "Pas de mauvaise tolérance et prise en charge tardive (>= 24h)", "tri": "3B"}
+        {
+          "critere": "Mauvaise tolérance, intention suicidaire, ou toxique cardiotrope/lésionnel",
+          "tri": "3A"
+        },
+        {
+          "critere": "Pas de mauvaise tolérance et prise en charge tardive (>= 24h)",
+          "tri": "3B"
+        }
       ]
     },
-        {
+    {
       "id": "convulsions",
       "specialite": "neurologie",
       "libelle": "Convulsions",
-      "tri_base": "3A",
+      "tri_base": "3B",
       "modulateurs": [
-        {"critere": "Crises multiples ou en cours, confusion, déficit ou fièvre", "tri": "3A"},
-        {"critere": "Récupération complète post-critique", "tri": "3B"}
+        {
+          "critere": "Crises multiples ou en cours, confusion, déficit ou fièvre",
+          "tri": "3A"
+        },
+        {
+          "critere": "Récupération complète post-critique",
+          "tri": "3B"
+        }
       ]
     },
     {
       "id": "diarrhee_vomissements",
       "specialite": "digestif",
       "libelle": "Diarrhée et/ou vomissements (motif générique, tous âges)",
-      "tri_base": "4",
+      "tri_base": "5",
       "modulateurs": [
-        {"critere": "Signes de déshydratation sévère (yeux cernés, pli cutané persistant, troubles de conscience, oligurie marquée)", "tri": "2"},
-        {"critere": "Signes de déshydratation modérée, ou vomissements incoercibles empêchant toute réhydratation orale, ou nourrisson/jeune enfant", "tri": "3A"},
-        {"critere": "Bien toléré, pas de signe de déshydratation, patient capable de s'hydrater", "tri": "4"}
+        {
+          "critere": "Signes de déshydratation sévère (yeux cernés, pli cutané persistant, troubles de conscience, oligurie marquée)",
+          "tri": "2"
+        },
+        {
+          "critere": "Signes de déshydratation modérée, ou vomissements incoercibles empêchant toute réhydratation orale, ou nourrisson/jeune enfant",
+          "tri": "3A"
+        },
+        {
+          "critere": "Bien toléré, pas de signe de déshydratation, patient capable de s'hydrater",
+          "tri": "4"
+        }
       ]
+    },
+    {
+      "id": "membre_douloureux_froid_ou_pale_ischemie",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Membre douloureux/froid ou pâle/ischémie",
+      "tri_base": "2",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "malaise",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Malaise",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "tachycardie_tachyarythmie",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Tachycardie/tachyarythmie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "bradycardie_bradyarythmie",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Bradycardie/bradyarythmie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "dysfonction_stimulateur_defibrillateur_cardiaque",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Dysfonction stimulateur/défibrillateur cardiaque",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "deme_des_membres_inferieurs_insuffisance_cardiaque",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Œdème des membres inférieurs/insuffisance cardiaque",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "palpitations",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Palpitations",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "hypertension_arterielle",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Hypertension artérielle",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "membre_douloureux_chaud_ou_rouge_phlebite",
+      "specialite": "cardio_circulatoire",
+      "libelle": "Membre douloureux/chaud ou rouge/phlébite",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "accident_dexposition_au_sang_et_ou_a_un_liquide_biologique",
+      "specialite": "infectiologie",
+      "libelle": "Accident d'exposition au sang et/ou à un liquide biologique",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "fievre",
+      "specialite": "infectiologie",
+      "libelle": "Fièvre",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "exposition_a_une_maladie_contagieuse",
+      "specialite": "infectiologie",
+      "libelle": "Exposition à une maladie contagieuse",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "douleur_abdominale",
+      "specialite": "abdominal",
+      "libelle": "Douleur abdominale",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "ictere",
+      "specialite": "abdominal",
+      "libelle": "Ictère",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "probleme_technique_stomie_cicatrices_postop",
+      "specialite": "abdominal",
+      "libelle": "Problème technique (stomie, cicatrices postop)",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "hernie_masse_ou_distension_abdominale",
+      "specialite": "abdominal",
+      "libelle": "Hernie, masse ou distension abdominale",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "corps_etranger_dans_sophage_estomac_intestins",
+      "specialite": "abdominal",
+      "libelle": "Corps étranger dans œsophage/estomac/intestins",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "corps_etranger_dans_le_rectum",
+      "specialite": "abdominal",
+      "libelle": "Corps étranger dans le rectum",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "constipation",
+      "specialite": "abdominal",
+      "libelle": "Constipation",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "douleur_anale",
+      "specialite": "abdominal",
+      "libelle": "Douleur anale",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "hoquet",
+      "specialite": "abdominal",
+      "libelle": "Hoquet",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "epistaxis",
+      "specialite": "orl_stomatologie",
+      "libelle": "Épistaxis",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "trouble_de_laudition_acouphenes",
+      "specialite": "orl_stomatologie",
+      "libelle": "Trouble de l'audition/acouphènes",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "tumefaction_orl_ou_cervicale",
+      "specialite": "orl_stomatologie",
+      "libelle": "Tuméfaction ORL ou cervicale",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "corps_etranger_orl",
+      "specialite": "orl_stomatologie",
+      "libelle": "Corps étranger ORL",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "pathologie_de_loreille_otite",
+      "specialite": "orl_stomatologie",
+      "libelle": "Pathologie de l'oreille/otite",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "douleur_de_gorge_angine_stomatite",
+      "specialite": "orl_stomatologie",
+      "libelle": "Douleur de gorge/angine/stomatite",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "obstruction_nasale_rhinite_sinusite",
+      "specialite": "orl_stomatologie",
+      "libelle": "Obstruction nasale/rhinite/sinusite",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "probleme_de_dent_ou_de_gencive",
+      "specialite": "orl_stomatologie",
+      "libelle": "Problème de dent ou de gencive",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "ecchymose_hematome_spontanee",
+      "specialite": "peau",
+      "libelle": "Ecchymose/hématome spontané(e)",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "abces_ou_infection_localisee_de_la_peau",
+      "specialite": "peau",
+      "libelle": "Abcès ou infection localisée de la peau",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "erytheme_et_autres_eruptions_deme_spontane",
+      "specialite": "peau",
+      "libelle": "Érythème et autres éruptions/œdème spontané",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "morsure_piqure_prurit_parasitose",
+      "specialite": "peau",
+      "libelle": "Morsure, piqûre, prurit, parasitose",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "corps_etranger_sous_la_peau",
+      "specialite": "peau",
+      "libelle": "Corps étranger sous la peau",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "dyspnee_avec_sifflement_respiratoire_2_ans",
+      "specialite": "pediatrie",
+      "libelle": "Dyspnée avec sifflement respiratoire (<=2 ans)",
+      "tri_base": "2",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "fievre_3_mois",
+      "specialite": "pediatrie",
+      "libelle": "Fièvre <= 3 mois",
+      "tri_base": "2",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "convulsion_hyperthermique",
+      "specialite": "pediatrie",
+      "libelle": "Convulsion hyperthermique",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "diarrhee_vomissements_du_nourrisson_24_mois",
+      "specialite": "pediatrie",
+      "libelle": "Diarrhée/vomissements du nourrisson (<= 24 mois)",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "troubles_alimentaires_du_nourrisson_6_mois",
+      "specialite": "pediatrie",
+      "libelle": "Troubles alimentaires du nourrisson (<= 6 mois)",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "bradycardie_pediatrie_2_ans",
+      "specialite": "pediatrie",
+      "libelle": "Bradycardie (pédiatrie <= 2 ans)",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "ictere_neonatal",
+      "specialite": "pediatrie",
+      "libelle": "Ictère néonatal",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "tachycardie_pediatrie_2_ans",
+      "specialite": "pediatrie",
+      "libelle": "Tachycardie (pédiatrie <= 2 ans)",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "hypotension_collapsus_pediatrie_2_ans",
+      "specialite": "pediatrie",
+      "libelle": "Hypotension/collapsus (pédiatrie <= 2 ans)",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "pleurs_incoercibles",
+      "specialite": "pediatrie",
+      "libelle": "Pleurs incoercibles",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "troubles_du_comportement_psychiatrie",
+      "specialite": "psychiatrie",
+      "libelle": "Troubles du comportement/psychiatrie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "anxiete_depression_consultation_psychiatrique",
+      "specialite": "psychiatrie",
+      "libelle": "Anxiété/dépression/consultation psychiatrique",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "asthme_ou_aggravation_bpco",
+      "specialite": "respiratoire",
+      "libelle": "Asthme ou aggravation BPCO",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "hemoptysie",
+      "specialite": "respiratoire",
+      "libelle": "Hémoptysie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "douleur_thoracique_embolie_pneumopathie_pneumothorax",
+      "specialite": "respiratoire",
+      "libelle": "Douleur thoracique/embolie/pneumopathie/pneumothorax",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "corps_etranger_voies_aeriennes",
+      "specialite": "respiratoire",
+      "libelle": "Corps étranger voies aériennes",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "toux_bronchite",
+      "specialite": "respiratoire",
+      "libelle": "Toux/bronchite",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "douleur_de_la_fosse_lombaire_du_flanc",
+      "specialite": "genito_urinaire",
+      "libelle": "Douleur de la fosse lombaire/du flanc",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "retention_durine_anurie",
+      "specialite": "genito_urinaire",
+      "libelle": "Rétention d'urine/anurie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "douleur_de_bourse_orchite_torsion_testicule",
+      "specialite": "genito_urinaire",
+      "libelle": "Douleur de bourse/orchite/torsion testicule",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "dysfonction_de_sonde_urinaire_double_j_stomie",
+      "specialite": "genito_urinaire",
+      "libelle": "Dysfonction de sonde urinaire/double J/stomie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "hematurie",
+      "specialite": "genito_urinaire",
+      "libelle": "Hématurie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "dysurie_brulure_mictionnelle_infection",
+      "specialite": "genito_urinaire",
+      "libelle": "Dysurie/brûlure mictionnelle/infection",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "ecoulement_ou_lesion_cutaneomuqueuse_genitale",
+      "specialite": "genito_urinaire",
+      "libelle": "Écoulement ou lésion cutanéomuqueuse génitale",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "problemes_de_grossesse_1er_et_2e_trimestres",
+      "specialite": "gyneco_obstetrique",
+      "libelle": "Problèmes de grossesse : 1er et 2e trimestres",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "problemes_de_grossesse_3e_trimestre",
+      "specialite": "gyneco_obstetrique",
+      "libelle": "Problèmes de grossesse : 3e trimestre",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "menometrorragie",
+      "specialite": "gyneco_obstetrique",
+      "libelle": "Ménométrorragie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "probleme_de_post_partum_allaitement",
+      "specialite": "gyneco_obstetrique",
+      "libelle": "Problème de post-partum (allaitement)",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "anomalie_du_sein",
+      "specialite": "gyneco_obstetrique",
+      "libelle": "Anomalie du sein",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "anomalie_vulvovaginale_corps_etranger",
+      "specialite": "gyneco_obstetrique",
+      "libelle": "Anomalie vulvovaginale/corps étranger",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "intoxication_non_medicamenteuse",
+      "specialite": "intoxication",
+      "libelle": "Intoxication non médicamenteuse",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "demande_de_sevrage_toxicomanie",
+      "specialite": "intoxication",
+      "libelle": "Demande de sevrage/toxicomanie",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "comportement_ebrieux_ivresse",
+      "specialite": "intoxication",
+      "libelle": "Comportement ébrieux/ivresse",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "confusion_desorientation_temporospatiale",
+      "specialite": "neurologie",
+      "libelle": "Confusion/désorientation temporospatiale",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "vertiges_trouble_de_lequilibre",
+      "specialite": "neurologie",
+      "libelle": "Vertiges/trouble de l'équilibre",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "corps_etranger_brulure_oculaire",
+      "specialite": "ophtalmologie",
+      "libelle": "Corps étranger/brûlure oculaire",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "trouble_visuel_il_douloureux_cecite",
+      "specialite": "ophtalmologie",
+      "libelle": "Trouble visuel/œil douloureux/cécité",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "demangeaison_il_rouge",
+      "specialite": "ophtalmologie",
+      "libelle": "Démangeaison/œil rouge",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "douleur_articulaire_arthrose_arthrite",
+      "specialite": "rhumatologie",
+      "libelle": "Douleur articulaire/arthrose/arthrite",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "douleur_rachidienne_cervicale_dorsale_lombaire",
+      "specialite": "rhumatologie",
+      "libelle": "Douleur rachidienne (cervicale, dorsale, lombaire)",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "douleur_de_membre_sciatique",
+      "specialite": "rhumatologie",
+      "libelle": "Douleur de membre/sciatique",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "agression_sexuelle_et_sevices",
+      "specialite": "traumatologie",
+      "libelle": "Agression sexuelle et sévices",
+      "tri_base": "2",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "brulure",
+      "specialite": "traumatologie",
+      "libelle": "Brûlure",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "traumatisme_de_bassin_hanche_femur_rachis",
+      "specialite": "traumatologie",
+      "libelle": "Traumatisme de bassin/hanche/fémur/rachis",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "traumatisme_oculaire",
+      "specialite": "traumatologie",
+      "libelle": "Traumatisme oculaire",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "traumatisme_maxillofacial_oreille",
+      "specialite": "traumatologie",
+      "libelle": "Traumatisme maxillofacial/oreille",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "plaie",
+      "specialite": "traumatologie",
+      "libelle": "Plaie",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "traumatisme_depaule_ou_distal_de_membre",
+      "specialite": "traumatologie",
+      "libelle": "Traumatisme d'épaule ou distal de membre",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "electrisation",
+      "specialite": "traumatologie",
+      "libelle": "Électrisation",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "traumatisme_cranien",
+      "specialite": "traumatologie",
+      "libelle": "Traumatisme crânien",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "pathologie_rare_et_grave_en_poussee_ex_drepanocytose",
+      "specialite": "divers",
+      "libelle": "Pathologie rare et grave en poussée (ex. drépanocytose)",
+      "tri_base": "2",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "hypothermie",
+      "specialite": "divers",
+      "libelle": "Hypothermie",
+      "tri_base": "2",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "hyperglycemie",
+      "specialite": "divers",
+      "libelle": "Hyperglycémie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "hypoglycemie",
+      "specialite": "divers",
+      "libelle": "Hypoglycémie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "anomalie_de_resultat_biologique",
+      "specialite": "divers",
+      "libelle": "Anomalie de résultat biologique",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "aeg_asthenie",
+      "specialite": "divers",
+      "libelle": "AEG/Asthénie",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "coup_de_chaleur_insolation",
+      "specialite": "divers",
+      "libelle": "Coup de chaleur/insolation",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "gelure_lesions_liees_au_froid",
+      "specialite": "divers",
+      "libelle": "Gelure/lésions liées au froid",
+      "tri_base": "3B",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "allergie",
+      "specialite": "divers",
+      "libelle": "Allergie",
+      "tri_base": "4",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "probleme_suite_de_soins_pansements",
+      "specialite": "divers",
+      "libelle": "Problème suite de soins (pansements)",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "renouvellement_ordonnance",
+      "specialite": "divers",
+      "libelle": "Renouvellement ordonnance",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "examen_a_des_fins_administratives_certificat_requisition",
+      "specialite": "divers",
+      "libelle": "Examen à des fins administratives/certificat/réquisition",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
+    },
+    {
+      "id": "demande_dhebergement_pour_raison_sociale",
+      "specialite": "divers",
+      "libelle": "Demande d'hébergement pour raison sociale",
+      "tri_base": "5",
+      "modulateurs": [],
+      "source": "Tableau 2, Taboulet et al. 2019 (tri moyen officiel, non encore affiné par des modulateurs spécifiques)"
     }
   ]
 }
