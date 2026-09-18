@@ -167,10 +167,17 @@ def detecter_red_flags(cas: CasClinique, referentiel: dict) -> ResultatDetection
         )
         if motif:
             tri_motif = motif["tri_base"]
+            modulateur_declenche = False
             for modulateur in motif["modulateurs"]:
                 if modulateur["critere"] in cas.criteres_presents:
                     tri_motif = _plus_urgent(tri_motif, modulateur["tri"])
                     flags.append(f"Motif '{motif['libelle']}' : {modulateur['critere']}")
+                    modulateur_declenche = True
+            if not modulateur_declenche:
+                # Traçabilité : même sans modulateur déclenché, le tri de
+                # base du motif contribue au résultat — il doit apparaître
+                # dans les flags, pas rester invisible pour l'audit.
+                flags.append(f"Motif '{motif['libelle']}' : tri de base ({motif['tri_base']}), aucun modulateur déclenché")
             tri_force = _plus_urgent(tri_force, tri_motif)
 
     categorie = MAPPING_CATEGORIES_BRIEF.get(tri_force) if tri_force else None

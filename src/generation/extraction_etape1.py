@@ -86,6 +86,97 @@ Réponds UNIQUEMENT avec le JSON, sans texte avant ni après, sans balises markd
 """
 
 
+def construire_vocabulaire_motifs_leger(referentiel: dict) -> str:
+    """Version allégée du vocabulaire : juste id + libellé, sans les critères
+    détaillés. Utilisée pour l'Appel A (choix du motif) — les critères ne
+    sont envoyés qu'à l'Appel B, uniquement pour le motif déjà choisi."""
+    return "\n".join(f"- {m['id']} : {m['libelle']}" for m in referentiel["motifs"])
+
+
+def construire_prompt_etape1a(referentiel: dict) -> str:
+    vocabulaire = construire_vocabulaire_motifs_leger(referentiel)
+    return f"""Tu es un assistant d'extraction de données cliniques structurées, pour un projet de triage médical.
+
+À partir du texte d'une vignette clinique, extrait UNIQUEMENT les informations explicitement présentes dans le texte, au format JSON suivant :
+
+{{
+  "motif_id": "un identifiant EXACT parmi la liste ci-dessous, ou null si aucun ne correspond vraiment",
+  "age_annees": nombre ou null,
+  "pas_mmhg": nombre ou null,
+  "fc_min": nombre ou null,
+  "spo2_pct": nombre ou null,
+  "fr_min": nombre ou null,
+  "glycemie_mmol_l": nombre ou null,
+  "gcs": nombre ou null,
+  "fievre": true ou false
+}}
+
+RÈGLE IMPÉRATIVE : n'invente JAMAIS une donnée absente du texte. Si une information n'est pas mentionnée, mets null (ou false pour fievre). Ne devine JAMAIS une constante vitale non donnée dans le texte, même si elle te semble plausible cliniquement.
+
+Motifs disponibles (choisis l'id EXACT le plus pertinent, ou null) :
+{vocabulaire}
+
+Réponds UNIQUEMENT avec le JSON, sans texte avant ni après, sans balises markdown.
+"""
+
+
+def construire_prompt_etape1b(motif: dict) -> str:
+    criteres = [mod["critere"] for mod in motif["modulateurs"]]
+    criteres_txt = "\n".join(f"- {c}" for c in criteres)
+    return f"""Tu es un assistant d'extraction clinique. Pour le motif "{motif['libelle']}", détermine lesquels des critères suivants sont EXPLICITEMENT vérifiés dans le texte de la vignette fournie.
+
+Critères possibles :
+{criteres_txt}
+
+RÈGLE IMPÉRATIVE : ne coche un critère que s'il est explicitement confirmé par le texte — ne devine jamais.
+
+Réponds UNIQUEMENT avec ce JSON, sans texte avant ni après :
+{{"criteres_presents": ["critères recopiés EXACTEMENT depuis la liste ci-dessus, uniquement ceux vérifiés"]}}
+"""
+
+
+def extraire_deux_etapes(referentiel: dict, texte_source: str, fournisseur: str, modele: str) -> dict:
+    """Extraction en 2 appels légers plutôt qu'un seul gros appel :
+    Appel A (vocabulaire léger, id+libellé seulement) choisit le motif et
+    extrait les champs simples ; Appel B (minuscule, seulement les critères
+    du motif choisi) vérifie les critères — seulement si le motif en a.
+    Résultat final au même format que l'ancien extraire() en un seul appel,
+    donc compatible avec le reste du pipeline sans autre changement."""
+    prompt_a = construire_prompt_etape1a(referentiel)
+    resultat_a = completer(prompt_a, f"Vignette :\n{texte_source}", fournisseur, modele, max_tokens=500)
+
+    if "_erreur_parsing" in resultat_a:
+        return resultat_a
+
+    resultat = {
+        "motif_id": resultat_a.get("motif_id"),
+        "age_annees": resultat_a.get("age_annees"),
+        "pas_mmhg": resultat_a.get("pas_mmhg"),
+        "fc_min": resultat_a.get("fc_min"),
+        "spo2_pct": resultat_a.get("spo2_pct"),
+        "fr_min": resultat_a.get("fr_min"),
+        "glycemie_mmol_l": resultat_a.get("glycemie_mmol_l"),
+        "gcs": resultat_a.get("gcs"),
+        "fievre": resultat_a.get("fievre", False),
+        "criteres_presents": [],
+    }
+
+    motif_id = resultat["motif_id"]
+    if motif_id:
+        motif = next((m for m in referentiel["motifs"] if m["id"] == motif_id), None)
+        if motif and motif["modulateurs"]:
+            prompt_b = construire_prompt_etape1b(motif)
+            resultat_b = completer(prompt_b, f"Vignette :\n{texte_source}", fournisseur, modele, max_tokens=200)
+            if "_erreur_parsing" not in resultat_b:
+                resultat["criteres_presents"] = resultat_b.get("criteres_presents", [])
+            # si l'Appel B échoue, on garde le reste du résultat plutôt que
+            # de tout perdre — criteres_presents reste juste vide, ce qui
+            # retombe sur le tri_base du motif à l'Étape 2 (comportement sûr)
+        # motif sans aucun modulateur : rien à vérifier, Appel B inutile
+
+    return resultat
+
+
 def comparer(attendu: dict, obtenu: dict) -> dict:
     champs = ["motif_id", "age_annees", "fievre"]
     resultat = {}
@@ -106,7 +197,7 @@ def executer_mode_test(golden_path: str, prompt_systeme: str, fournisseur: str, 
     n_ok, n_total = 0, 0
     for cas in golden["cas"]:
         n_total += 1
-        obtenu = completer(prompt_systeme, f"Vignette :\n{cas['vignette_source']}", fournisseur, modele, max_tokens=2048)
+        obtenu = completer(prompt_systeme, f"Vignette :\n{cas['vignette_source']}", fournisseur, modele, max_tokens=400)
         attendu = cas["extraction_attendue"]
 
         print(f"\n=== {cas['id']} ===")
@@ -156,7 +247,7 @@ def executer_mode_reel(input_path: str, output_path: str, prompt_systeme: str, f
     with open(output_file, "a", encoding="utf-8") as f_out:
         for i, vignette in enumerate(vignettes, 1):
             texte_source = vignette.get("contexte_clinique") or vignette.get("question", "")
-            extraction = completer(prompt_systeme, f"Vignette :\n{texte_source}", fournisseur, modele, max_tokens=2048)
+            extraction = completer(prompt_systeme, f"Vignette :\n{texte_source}", fournisseur, modele, max_tokens=400)
 
             if "_erreur_parsing" in extraction:
                 n_erreurs += 1
@@ -186,11 +277,11 @@ def main():
     parser.add_argument("--fournisseur", choices=["groq", "gemini"], default="gemini",
                          help="Défaut : gemini, pour ne pas entrer en compétition avec le quota Groq du filtre")
     parser.add_argument("--modele", default=None,
-                         help="Défaut selon le fournisseur : gemini-3.6-flash ou openai/gpt-oss-20b")
+                         help="Défaut selon le fournisseur : gemini-2.5-flash ou openai/gpt-oss-20b")
     parser.add_argument("--pause", type=float, default=3.0)
     args = parser.parse_args()
 
-    modele = args.modele or ("gemini-3.6-flash" if args.fournisseur == "gemini" else "openai/gpt-oss-20b")
+    modele = args.modele or ("gemini-2.5-flash" if args.fournisseur == "gemini" else "openai/gpt-oss-20b")
 
     ref_path = Path(__file__).parent.parent / "referentiel" / "french_referentiel.json"
     referentiel = charger_referentiel(str(ref_path))
