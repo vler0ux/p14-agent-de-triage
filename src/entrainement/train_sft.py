@@ -1,4 +1,3 @@
-%%writefile train_sft.py
 """
 train_sft.py
 
@@ -103,11 +102,24 @@ def main():
     )
 
     print("Debut de l'entrainement...")
-    trainer.train()
+    resultat_entrainement = trainer.train()
 
     print(f"Sauvegarde de l'adaptateur LoRA dans {args.output_dir}")
     trainer.save_model(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
+
+    metriques_train = resultat_entrainement.metrics
+    trainer.log_metrics("train", metriques_train)
+    trainer.save_metrics("train", metriques_train)
+    print(f"Loss finale (train) : {metriques_train.get('train_loss')}")
+
+    if args.val_file:
+        metriques_eval = trainer.evaluate()
+        trainer.log_metrics("eval", metriques_eval)
+        trainer.save_metrics("eval", metriques_eval)
+        print(f"Loss finale (eval) : {metriques_eval.get('eval_loss')}")
+
+    trainer.save_state()  # écrit trainer_state.json (dont log_history) dans output_dir
 
     if args.merge_adapter:
         print("Fusion de l'adaptateur dans le modele de base...")
