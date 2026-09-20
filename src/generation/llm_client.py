@@ -16,6 +16,10 @@ utilise le nouveau SDK `google-genai` (import `from google import genai`).
 ⚠️ L'API Anthropic est PAYANTE (compte séparé sur console.anthropic.com,
 différent d'un abonnement claude.ai) — facturation à l'usage.
 
+Température : 0 par défaut (réponses les plus stables possibles d'un passage à
+l'autre) pour tous les fournisseurs. À relever explicitement pour les étapes
+créatives (ex. génération de dialogues : temperature=0.7).
+
 Usage :
     from llm_client import completer
     resultat = completer(prompt_systeme, contenu_utilisateur,
@@ -49,7 +53,8 @@ def _extraire_delai_attente(message_erreur: str, defaut: float = 70.0) -> float:
     return defaut
 
 
-def _appeler_groq(system_prompt: str, user_content: str, modele: str, max_tokens: int, max_tentatives: int) -> str:
+def _appeler_groq(system_prompt: str, user_content: str, modele: str, max_tokens: int, max_tentatives: int,
+                  temperature: float = 0.0) -> str:
     import groq
 
     api_key = os.environ.get("GROQ_API_KEY")
@@ -62,6 +67,7 @@ def _appeler_groq(system_prompt: str, user_content: str, modele: str, max_tokens
             reponse = client.chat.completions.create(
                 model=modele,
                 max_tokens=max_tokens,
+                temperature=temperature,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content},
@@ -77,23 +83,26 @@ def _appeler_groq(system_prompt: str, user_content: str, modele: str, max_tokens
     raise RuntimeError("Quota Groq toujours dépassé après plusieurs tentatives")
 
 
-def _construire_config_gemini(types_module, system_prompt: str, max_tokens: int):
+def _construire_config_gemini(types_module, system_prompt: str, max_tokens: int, temperature: float = 0.0):
     """Construit la config Gemini, avec repli si thinking_config n'est pas
     disponible sur cette version du SDK/modèle."""
     try:
         return types_module.GenerateContentConfig(
             system_instruction=system_prompt,
             max_output_tokens=max_tokens,
+            temperature=temperature,
             thinking_config=types_module.ThinkingConfig(thinking_budget=0),
         )
     except (AttributeError, TypeError):
         return types_module.GenerateContentConfig(
             system_instruction=system_prompt,
             max_output_tokens=max_tokens,
+            temperature=temperature,
         )
 
 
-def _appeler_gemini(system_prompt: str, user_content: str, modele: str, max_tokens: int, max_tentatives: int) -> str:
+def _appeler_gemini(system_prompt: str, user_content: str, modele: str, max_tokens: int, max_tentatives: int,
+                    temperature: float = 0.0) -> str:
     from google import genai
     from google.genai import types
 
@@ -102,7 +111,7 @@ def _appeler_gemini(system_prompt: str, user_content: str, modele: str, max_toke
         raise RuntimeError("GEMINI_API_KEY manquant dans .env")
     client = genai.Client(api_key=api_key)
 
-    config = _construire_config_gemini(types, system_prompt, max_tokens)
+    config = _construire_config_gemini(types, system_prompt, max_tokens, temperature)
 
     for tentative in range(1, max_tentatives + 1):
         try:
@@ -128,7 +137,8 @@ def _appeler_gemini(system_prompt: str, user_content: str, modele: str, max_toke
     raise RuntimeError("Quota Gemini toujours dépassé après plusieurs tentatives")
 
 
-def _appeler_anthropic(system_prompt: str, user_content: str, modele: str, max_tokens: int, max_tentatives: int) -> str:
+def _appeler_anthropic(system_prompt: str, user_content: str, modele: str, max_tokens: int, max_tentatives: int,
+                       temperature: float = 0.0) -> str:
     import anthropic
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -136,17 +146,32 @@ def _appeler_anthropic(system_prompt: str, user_content: str, modele: str, max_t
         raise RuntimeError("ANTHROPIC_API_KEY manquant dans .env")
     client = anthropic.Anthropic(api_key=api_key)
 
+    # Les versions récentes du SDK Python n'ont plus "temperature" dans la signature de
+    # messages.create() : la passer en argument nommé lève un TypeError. On l'envoie donc
+    # par "extra_body", fusionné tel quel dans la requête, ce qui marche avec toutes les
+    # versions du SDK. Si le modèle refuse ce paramètre (erreur 400 qui le mentionne : c'est le
+    # cas des modèles les plus récents), on réessaie sans lui et on le signale une fois.
+    envoyer_temperature = True
+
     for tentative in range(1, max_tentatives + 1):
         try:
-            reponse = client.messages.create(
+            requete = dict(
                 model=modele,
                 max_tokens=max_tokens,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}],
             )
+            if envoyer_temperature:
+                requete["extra_body"] = {"temperature": temperature}
+            reponse = client.messages.create(**requete)
             return reponse.content[0].text.strip()
         except Exception as e:
             message = str(e)
+            if envoyer_temperature and "temperature" in message.lower() and "429" not in message:
+                envoyer_temperature = False
+                print(f"  [Anthropic] Le modèle {modele} refuse le paramètre temperature : appel refait sans "
+                      f"(réponses moins déterministes).", file=sys.stderr)
+                continue
             # 429 = quota/rate limit ; 529 = surcharge momentanée des serveurs
             # Anthropic (code spécifique à leur API, différent du 503 usuel).
             est_transitoire = any(motif in message for motif in [
@@ -162,8 +187,17 @@ def _appeler_anthropic(system_prompt: str, user_content: str, modele: str, max_t
     raise RuntimeError("Quota/surcharge Anthropic toujours présent après plusieurs tentatives")
 
 
+def _extraire_premier_json(texte: str) -> dict:
+    """Retourne le premier objet JSON trouvé dans le texte, en ignorant ce qui
+    l'entoure. Lève json.JSONDecodeError s'il n'y en a pas de valide."""
+    debut = texte.find("{")
+    if debut == -1:
+        raise json.JSONDecodeError("Aucun objet JSON dans la réponse", texte, 0)
+    objet, _ = json.JSONDecoder().raw_decode(texte[debut:])
+    return objet
+
 def completer(system_prompt: str, user_content: str, fournisseur: str, modele: str,
-              max_tokens: int = 400, max_tentatives: int = 5) -> dict:
+              max_tokens: int = 400, max_tentatives: int = 5, temperature: float = 0.0) -> dict:
     """Point d'entrée unique : appelle le fournisseur demandé, nettoie et
     parse la réponse en JSON. Retourne {"_erreur_parsing": "..."} si le
     modèle n'a pas renvoyé un JSON exploitable."""
@@ -171,17 +205,15 @@ def completer(system_prompt: str, user_content: str, fournisseur: str, modele: s
         raise ValueError(f"Fournisseur inconnu : {fournisseur!r} (attendu : {FOURNISSEURS_VALIDES})")
 
     if fournisseur == "groq":
-        texte = _appeler_groq(system_prompt, user_content, modele, max_tokens, max_tentatives)
+        texte = _appeler_groq(system_prompt, user_content, modele, max_tokens, max_tentatives, temperature)
     elif fournisseur == "anthropic":
-        texte = _appeler_anthropic(system_prompt, user_content, modele, max_tokens, max_tentatives)
+        texte = _appeler_anthropic(system_prompt, user_content, modele, max_tokens, max_tentatives, temperature)
     else:
-        texte = _appeler_gemini(system_prompt, user_content, modele, max_tokens, max_tentatives)
-
-    texte_nettoye = texte.strip()
-    if texte_nettoye.startswith("```"):
-        texte_nettoye = re.sub(r"^```(?:json)?\s*|\s*```$", "", texte_nettoye).strip()
+        texte = _appeler_gemini(system_prompt, user_content, modele, max_tokens, max_tentatives, temperature)
 
     try:
-        return json.loads(texte_nettoye)
+        return _extraire_premier_json(texte)
     except json.JSONDecodeError:
-        return {"_erreur_parsing": texte[:300]}
+        # On garde la réponse presque entière (et non 300 caractères) pour pouvoir
+        # diagnostiquer l'échec.
+        return {"_erreur_parsing": texte[:2000]}

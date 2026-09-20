@@ -10,3 +10,10 @@ tqdm>=4.66.0
 # Décommenter selon le LLM teacher choisi pour les Étapes 1/3/4/5 :
 anthropic>=0.34.0
 # openai>=1.40.0
+
+# Phase 2 — Entraînement SFT (train_sft.py) : nécessite un GPU pour un entraînement réel
+torch>=2.3.0
+transformers>=4.44.0
+accelerate>=0.33.0
+peft>=0.12.0
+trl>=0.9.6

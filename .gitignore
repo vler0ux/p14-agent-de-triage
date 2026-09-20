@@ -2,6 +2,8 @@
 data/raw/
 data/normalized/
 data/anonymized/
+data/relecture/
+data/sft/
 __pycache__/
 *.pyc
 .venv/
@@ -10,3 +12,5 @@ venv/
 agent_triage/
 ENV/
 backups/
+archives/
+sauvegarde_avant_correctif_citations/

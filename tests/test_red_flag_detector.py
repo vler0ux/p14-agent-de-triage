@@ -116,10 +116,23 @@ def test_fievre_nourrisson_plus_3_mois_ne_force_pas_la_regle_specifique(referent
 # Motifs de recours et modulateurs
 # ---------------------------------------------------------------------------
 
-def test_motif_sca_avec_ecg_typique_force_tri2(referentiel):
+def test_motif_sca_avec_ecg_typique_force_tri1(referentiel):
+    """Grille FRENCH V1.1 : « ECG anormal: typique de SCA » = tri 1 (l'ancienne version du
+    référentiel disait tri 2, avec un critère écrit « ECG anormal typique de SCA »)."""
     cas = CasClinique(
         motif_id="douleur_thoracique_sca",
-        criteres_presents=["ECG anormal typique de SCA"],
+        criteres_presents=["ECG anormal: typique de SCA"],
+    )
+    resultat = detecter_red_flags(cas, referentiel)
+    assert resultat.tri_minimal_force == "1"
+    assert resultat.categorie_brief_minimale == "urgence_maximale"
+
+
+def test_motif_sca_avec_ecg_non_typique_force_tri2(referentiel):
+    """Grille FRENCH V1.1 : ECG anormal non typique de SCA = tri 2."""
+    cas = CasClinique(
+        motif_id="douleur_thoracique_sca",
+        criteres_presents=["ECG anormal: non typique de SCA, douleur typique persistante/intense"],
     )
     resultat = detecter_red_flags(cas, referentiel)
     assert resultat.tri_minimal_force == "2"
@@ -169,10 +182,8 @@ def test_combinaison_constantes_et_motif_retient_le_plus_urgent(referentiel):
 # ---------------------------------------------------------------------------
 
 def test_override_declenche_si_llm_sous_estime(referentiel):
-    cas = CasClinique(
-        motif_id="douleur_thoracique_sca",
-        criteres_presents=["ECG anormal typique de SCA"],
-    )
+    """Le plancher des CONSTANTES VITALES est inviolable : le label du LLM est relevé."""
+    cas = CasClinique(pas_mmhg=65)
     resultat = detecter_red_flags(cas, referentiel)
     decision = appliquer_override(categorie_llm="differee", resultat_deterministe=resultat)
 
@@ -181,18 +192,36 @@ def test_override_declenche_si_llm_sous_estime(referentiel):
     assert decision["label_llm_initial"] == "differee"
 
 
+def test_plancher_du_motif_ne_force_pas_le_label_mais_le_signale(referentiel):
+    """Le plancher du MOTIF est révisable (décision du 20 sept. 2026) : si le LLM descend en dessous,
+    le label est conservé et le cas est marqué pour relecture."""
+    cas = CasClinique(
+        motif_id="douleur_thoracique_sca",
+        criteres_presents=["ECG anormal: typique de SCA"],
+    )
+    resultat = detecter_red_flags(cas, referentiel)
+    decision = appliquer_override(categorie_llm="differee", resultat_deterministe=resultat)
+
+    assert decision["override_applique"] is False
+    assert decision["label_final"] == "differee"
+    assert decision["sous_plancher_motif"] is True
+    assert decision["categorie_plancher_motif"] == "urgence_maximale"
+
+
 def test_pas_override_si_llm_deja_assez_prudent(referentiel):
     """Si le LLM propose déjà un niveau au moins aussi urgent que le
     référentiel, on ne doit PAS écraser son jugement."""
     cas = CasClinique(
         motif_id="douleur_thoracique_sca",
-        criteres_presents=["ECG anormal typique de SCA"],  # impose "urgence_maximale"
+        criteres_presents=["ECG anormal: typique de SCA"],  # plancher du motif : "urgence_maximale"
     )
     resultat = detecter_red_flags(cas, referentiel)
+    assert resultat.categorie_motif == "urgence_maximale"   # garde-fou : le critère est bien reconnu
     decision = appliquer_override(categorie_llm="urgence_maximale", resultat_deterministe=resultat)
 
     assert decision["override_applique"] is False
     assert decision["label_final"] == "urgence_maximale"
+    assert decision["sous_plancher_motif"] is False
 
 
 def test_pas_override_si_aucun_red_flag_deterministe(referentiel):

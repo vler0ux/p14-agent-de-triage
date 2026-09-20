@@ -1,0 +1,19 @@
+{#- Template ChatML minimal pour l'entraînement SFT de l'agent de triage.
+    - Pas de bloc <think> : rendu identique à l'entraînement et à l'inférence.
+    - Les marqueurs generation/endgeneration délimitent ce qui est APPRIS :
+      le contenu de l'agent + son token de fin de tour <|im_end|>.
+    - Le reste (système, patient, en-têtes de rôle) est lu mais IGNORÉ par la loss. -#}
+{%- for message in messages -%}
+{%- if message.role == 'assistant' -%}
+{{- '<|im_start|>assistant\n' -}}
+{%- generation -%}
+{{- (message.content | trim) + '<|im_end|>' -}}
+{%- endgeneration -%}
+{{- '\n' -}}
+{%- else -%}
+{{- '<|im_start|>' + message.role + '\n' + (message.content | trim) + '<|im_end|>\n' -}}
+{%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+{{- '<|im_start|>assistant\n' -}}
+{%- endif -%}

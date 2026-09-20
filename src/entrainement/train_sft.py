@@ -1,14 +1,14 @@
-%%writefile train_sft.py
 """
-train_sft.py
 
 Entraînement SFT (Supervised Fine-Tuning) de Qwen3-1.7B-Base avec LoRA, à
 partir du dataset produit par preparer_dataset_sft.py.
 """
 
 import argparse
+from pathlib import Path
 
 MODELE_BASE_PAR_DEFAUT = "Qwen/Qwen3-1.7B-Base"
+CHAT_TEMPLATE_PATH = Path(__file__).parent / "template_triage.jinja"
 
 LORA_TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj"]
 
@@ -33,6 +33,8 @@ def main():
     parser.add_argument("--save-steps", type=int, default=50)
     parser.add_argument("--logging-steps", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--precision", choices=["auto", "bf16", "fp16"], default="auto",
+                         help="auto : bf16 si le GPU le gère nativement (Ampere ou plus récent), sinon fp16")
     parser.add_argument("--merge-adapter", action="store_true")
 
     args = parser.parse_args()
@@ -47,11 +49,18 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.modele_base)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+        
+    cuda = torch.cuda.is_available()
+    precision = args.precision
+    if precision == "auto":
+        precision = "bf16" if cuda and torch.cuda.get_device_capability(0)[0] >= 8 else "fp16"
+    dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}[precision] if cuda else torch.float32
+    print(f"Précision d'entraînement : {precision if cuda else 'fp32 (CPU)'}")
 
     modele = AutoModelForCausalLM.from_pretrained(
         args.modele_base,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-        device_map="auto" if torch.cuda.is_available() else None,
+        dtype=dtype,
+        device_map="auto" if cuda else None,
     )
 
     print("Configuration LoRA...")
@@ -92,6 +101,8 @@ def main():
         bf16=torch.cuda.is_available(),
         report_to=[],
         dataset_text_field="text",
+        chat_template_path=str(CHAT_TEMPLATE_PATH),
+        assistant_only_loss=True,
     )
 
     trainer = SFTTrainer(
@@ -102,12 +113,32 @@ def main():
         processing_class=tokenizer,
     )
 
+# Vérification du masquage : seuls les tours de l'agent doivent être appris    
+    ex = trainer.train_dataset[0]    
+    n = sum(1 for l in ex["labels"] if l != -100)
+    print(f"[masquage] tokens appris : {n}/{len(ex['input_ids'])}")
+    print(tokenizer.decode([l for l in ex["labels"] if l != -100]))
+
     print("Debut de l'entrainement...")
-    trainer.train()
+    resultat_entrainement = trainer.train()
 
     print(f"Sauvegarde de l'adaptateur LoRA dans {args.output_dir}")
     trainer.save_model(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
+    
+    metriques_train = resultat_entrainement.metrics
+    trainer.log_metrics("train", metriques_train)
+    trainer.save_metrics("train", metriques_train)
+    print(f"Loss finale (train) : {metriques_train.get('train_loss')}")
+
+    if args.val_file:
+        metriques_eval = trainer.evaluate()
+        trainer.log_metrics("eval", metriques_eval)
+        trainer.save_metrics("eval", metriques_eval)
+        print(f"Loss finale (eval) : {metriques_eval.get('eval_loss')}")
+
+    trainer.save_state()  # écrit trainer_state.json (dont log_history) dans output_dir
+
 
     if args.merge_adapter:
         print("Fusion de l'adaptateur dans le modele de base...")

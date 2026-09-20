@@ -7,10 +7,13 @@ Hospitalier Saint-Aurélien (CHSA).
 
 ```
 triage-poc-chsa/
-├── data/
-│   ├── raw/                # Cache local / échantillons de test des corpus sources
-│   ├── normalized/         # Sorties JSONL au format "vignette normalisée" (une par source)
-│   └── anonymized/         # Sorties JSONL anonymisées (RGPD) + journaux d'audit
+├── data/                      # Toutes les sorties de données sont ignorées par git (régénérables via les scripts)
+│   ├── raw/                   # Cache local / échantillons de test des corpus sources
+│   ├── normalized/            # Sorties JSONL au format "vignette normalisée" (une par source)
+│   ├── anonymized/            # Sorties JSONL anonymisées (RGPD) + journaux d'audit
+│   ├── relecture/             # Exports CSV de la file de relecture humaine (exporter_relecture.py)
+│   ├── sft/                   # Dataset conversationnel final (train/validation) pour l'entraînement SFT
+│   └── backups/               # Sauvegardes horodatées créées par sauvegarder_donnees.sh
 ├── src/
 │   ├── ingestion/
 │   │   ├── schema.py                    # Format commun de vignette normalisée
@@ -19,22 +22,30 @@ triage-poc-chsa/
 │   │   ├── load_medquad.py              # Ingestion MedQuAD (FAIT — validé)
 │   │   └── echantillonner_vignettes.py  # Échantillonnage aléatoire reproductible (FAIT — validé)
 │   ├── referentiel/
-│   │   ├── french_referentiel.json  # Référentiel FRENCH structuré (16 motifs, dont la distinction
-│   │   │                            # traumatisme_amputation_membre / traumatisme_amputation_digitale
-│   │   │                            # et le motif diarrhee_vomissements)
-│   │   └── red_flag_detector.py     # Détection déterministe + logique d'override
+│   │   ├── french_referentiel.json                # Référentiel FRENCH structuré (motifs + modulateurs)
+│   │   ├── french_grille_v1_1_transcription.json  # Transcription source de la grille FRENCH V1.1 (tableau du PDF officiel)
+│   │   ├── construire_referentiel_depuis_grille.py # Reconstruit les modulateurs du référentiel depuis la grille transcrite
+│   │   └── red_flag_detector.py                    # Détection déterministe + logique d'override
 │   ├── generation/
-│   │   ├── llm_client.py                  # Abstraction d'appel LLM (Groq / Gemini, interface commune)
+│   │   ├── llm_client.py                  # Abstraction d'appel LLM (Groq / Gemini / Anthropic, interface commune)
 │   │   ├── filtre_pertinence.py           # Étape 0 : filtre de pertinence clinique (API Groq)
 │   │   ├── extraction_etape1.py           # Étape 1 : extraction structurée du cas clinique (LLM)
+│   │   ├── dedoublonner_vignettes.py      # Regroupe les vignettes qui décrivent le même cas clinique
 │   │   ├── labellisation_etape3.py        # Étape 3 : proposition du niveau de priorité (LLM)
-│   │   ├── contre_validation_etape4.py    # Étape 4 : challenge du label par un LLM "auditeur"
+│   │   ├── contre_validation_etape4.py    # Étape 4 : audit du label retenu (signalement seul, LLM "auditeur")
 │   │   ├── generation_dialogue_etape5.py  # Étape 5 : génération du dialogue patient/agent
-│   │   └── orchestrer_pipeline.py         # Enchaîne réellement les Étapes 1 → 2 → 3 → 4
-│   └── anonymisation/
-│       └── anonymiser_vignettes.py  # Anonymisation RGPD (Presidio + spaCy fr_core_news_md)
+│   │   ├── orchestrer_pipeline.py         # Enchaîne les Étapes 1 → 2 → 3 → 4 + file de relecture
+│   │   └── exporter_relecture.py          # Exporte les cas à relire en CSV, triés par priorité
+│   ├── anonymisation/
+│   │   └── anonymiser_vignettes.py  # Anonymisation RGPD (Presidio + spaCy fr_core_news_md)
+│   └── entrainement/
+│       ├── preparer_dataset_sft.py  # Dialogues (Étape 5) -> dataset conversationnel (format TRL / chat template Qwen3)
+│       ├── template_triage.jinja    # Chat template Qwen3 avec marqueurs {% generation %} (masquage de l'entraînement)
+│       ├── diag_masquage.py         # Diagnostic sans GPU : vérifie le masquage produit par le chat template
+│       └── train_sft.py             # Entraînement SFT (LoRA) de Qwen3-1.7B-Base
 ├── tests/
 │   ├── test_red_flag_detector.py     # Suite de tests unitaires (Étape 2 — 20 tests, FAIT)
+│   ├── test_lot1.py                  # Tests du lot 1 sans appel API (faux LLM) : croisement, planchers, file de relecture
 │   └── golden_etape1_extraction.json # Jeu de cas de référence (Étapes 1, 3, 4)
 ├── run_pipeline.sh         # Script d'orchestration (ingestion + tests, option --avec-filtre)
 ├── sauvegarder_donnees.sh  # Sauvegarde horodatée de data/normalized/ et data/anonymized/
@@ -144,11 +155,28 @@ selon le modèle).
 Extrait le cas clinique en JSON structuré (motif, constantes vitales,
 critères) à partir du texte libre d'une vignette, en s'appuyant
 dynamiquement sur le vocabulaire du référentiel FRENCH. Se teste contre le
-jeu de cas de référence `tests/golden_etape1_extraction.json`.
+jeu de cas de référence `tests/golden_etape1_extraction.json`. Utilise
+Anthropic (Claude Haiku) par défaut.
 
 ```bash
 cd src/generation
 python3 extraction_etape1.py --golden ../../tests/golden_etape1_extraction.json
+```
+
+### Dédoublonnage des vignettes (`dedoublonner_vignettes.py`)
+
+MediQAl est un jeu de *questions* d'examen : un même dossier clinique donne
+souvent plusieurs questions, donc plusieurs vignettes qui répètent le même
+texte de cas. Ce script regroupe les vignettes par cas clinique (une seule
+conservée par cas), ajoute un `cas_id` partagé (utile pour un futur découpage
+train/validation/test par cas plutôt que par question) et marque les cas où
+le filtre de pertinence (Étape 0) s'est contredit d'une question à l'autre.
+Ne modifie jamais le fichier d'entrée ; à lancer après l'anonymisation.
+
+```bash
+cd src/generation
+python3 dedoublonner_vignettes.py --dry-run   # simulation, rapport seul
+python3 dedoublonner_vignettes.py             # écrit *_dedup.jsonl
 ```
 
 ### Étape 3 — Labellisation (`labellisation_etape3.py`)
@@ -156,22 +184,24 @@ python3 extraction_etape1.py --golden ../../tests/golden_etape1_extraction.json
 À partir du cas structuré (sortie de l'Étape 1), le LLM propose un niveau de
 priorité parmi `urgence_maximale` / `moderee` / `differee`, avec
 justification. Ce n'est pas le label final : il est ensuite croisé avec la
-détection déterministe de l'Étape 2 (`red_flag_detector.py`), puis challengé
-à l'Étape 4. Utilise Gemini par défaut, pour ne pas entrer en compétition
-avec le quota Groq du filtre de pertinence.
+détection déterministe de l'Étape 2 (`red_flag_detector.py`), puis audité à
+l'Étape 4. Utilise Anthropic (Claude Haiku) par défaut, retenu après
+comparaison avec Gemini sur un premier lot de vignettes.
 
 ```bash
 cd src/generation
 python3 labellisation_etape3.py --golden ../../tests/golden_etape1_extraction.json
 ```
 
-### Étape 4 — Contre-validation (`contre_validation_etape4.py`)
+### Étape 4 — Audit du label (`contre_validation_etape4.py`)
 
-Un second appel LLM, en posture d'auditeur, vérifie uniquement si le label
-retenu après le croisement Étape 2/3 ne SOUS-estime pas la gravité (jamais
-l'inverse — le sur-triage n'est pas contesté à cette étape). Utilise Groq
-par défaut, volontairement différent du fournisseur de l'Étape 3, pour
-réduire la corrélation des erreurs entre les deux jugements.
+Un second appel LLM, en posture d'auditeur avec un fournisseur différent
+(Groq par défaut, pour réduire la corrélation des erreurs entre les deux
+jugements), signale si le label retenu après le croisement Étape 2/3
+SOUS-estime la gravité — jamais l'inverse, le sur-triage n'est pas contesté
+à cette étape. Ce signalement n'écrase plus automatiquement le label : il
+alimente la file de relecture humaine (voir `orchestrer_pipeline.py`
+ci-dessous).
 
 ```bash
 cd src/generation
@@ -180,18 +210,43 @@ python3 contre_validation_etape4.py --golden ../../tests/golden_etape1_extractio
 
 ### Orchestration complète des Étapes 1 → 4 (`orchestrer_pipeline.py`)
 
-Chaîne réellement les 4 étapes sur un fichier de vignettes (idéalement déjà
-filtrées et anonymisées), avec croisement Étape 2/3 et résolution de la
-contre-validation à chaque vignette. Conserve la trace complète de chaque
-étape dans la sortie, pour l'auditabilité exigée par le brief. Reprend
-automatiquement en cas d'interruption (comme `filtre_pertinence.py`).
+Chaîne les 4 étapes sur un fichier de vignettes filtrées, anonymisées et
+dédoublonnées, avec croisement Étape 2/3 (plancher des constantes vitales
+inviolable, plancher du motif révisable) et calcul d'un `score_relecture`
+qui priorise les cas dont le label est SOUS un plancher de la grille FRENCH
+(le vrai risque : le sous-triage). Conserve la trace complète de chaque
+étape — y compris fournisseur, modèle et empreinte du prompt utilisés — dans
+la sortie, pour l'auditabilité exigée par le brief. Reprend automatiquement
+en cas d'interruption (comme `filtre_pertinence.py`).
 
 ```bash
 cd src/generation
 python3 orchestrer_pipeline.py \
-    --input ../../data/anonymized/mediqal_mcqm_urgences_anonymise.jsonl \
+    --input ../../data/anonymized/mediqal_mcqm_urgences_complet_dedup.jsonl \
     --output ../../data/normalized/mediqal_mcqm_pipeline_complet.jsonl \
     --limit 10
+```
+
+Les fournisseurs/modèles par défaut de chaque étape (Étapes 1 et 3 =
+Anthropic/Haiku, Étape 4 = Groq) peuvent être surchargés en ligne de
+commande (`--etape1-fournisseur`, `--etape1-modele`, etc.), via le `.env`
+(`ETAPE1_FOURNISSEUR`, `ETAPE1_MODELE`, ...), ou tous basculés sur Haiku
+avec `--tout-haiku` si un quota bloque. Priorité : ligne de commande > `.env`
+> valeurs par défaut du script.
+
+### Export de la file de relecture (`exporter_relecture.py`)
+
+Exporte en CSV (lisible Excel/LibreOffice) les cas à relire par un humain,
+triés par `score_relecture` et limités à un budget de relectures (défaut :
+20). Les cas au-delà du budget sont listés à part (`dans_le_budget = non`,
+fichier annexe `*_non_relus.txt`) et ne doivent pas être utilisés pour
+l'entraînement ou le test tant qu'ils n'ont pas été relus.
+
+```bash
+cd src/generation
+python3 exporter_relecture.py \
+    --input ../../data/normalized/mediqal_mcqm_pipeline_complet.jsonl \
+    --output ../../data/relecture/relecture.csv --n 20
 ```
 
 ### Étape 5 — Génération du dialogue (`generation_dialogue_etape5.py`)
@@ -229,16 +284,82 @@ python3 anonymiser_vignettes.py \
 Prérequis : `pip install presidio-analyzer presidio-anonymizer spacy` puis
 `python -m spacy download fr_core_news_md`.
 
+## Référentiel FRENCH
+
+### Reconstruction des modulateurs depuis la grille (`construire_referentiel_depuis_grille.py`)
+
+Reconstruit les modulateurs (critères et niveaux de tri) de
+`french_referentiel.json` à partir de `french_grille_v1_1_transcription.json`,
+une transcription vérifiable du tableau de la grille FRENCH V1.1 extraite
+automatiquement du PDF officiel. Le tri de base de chaque motif devient le
+« Tri M » (tri médian) de la grille, et chaque cellule non vide des colonnes
+Tri 1 à Tri 5 devient un modulateur.
+
+```bash
+cd src/referentiel
+python3 construire_referentiel_depuis_grille.py \
+    --entree french_referentiel.json \
+    --grille french_grille_v1_1_transcription.json \
+    --sortie french_referentiel.json
+```
+
+## Entraînement SFT
+
+### Préparation du dataset (`preparer_dataset_sft.py`)
+
+Transforme les dialogues générés (sortie de `generation_dialogue_etape5.py`)
+en dataset conversationnel `{"messages": [...]}` compatible avec le chat
+template de Qwen3 et le format attendu par TRL (`SFTTrainer`), avec un split
+train/validation reproductible (graine fixée).
+
+```bash
+cd src/entrainement
+python3 preparer_dataset_sft.py \
+    --input ../../data/normalized/mediqal_mcqm_dialogues.jsonl \
+    --output-dir ../../data/sft --val-ratio 0.1
+```
+
+### Diagnostic du masquage (`diag_masquage.py`)
+
+Vérifie sans GPU, sur le vrai tokenizer de Qwen3-1.7B-Base, que le chat
+template `template_triage.jinja` (marqueurs `{% generation %}`) masque bien
+uniquement les tours de l'agent lors de l'entraînement — utile pour détecter
+une erreur de template avant de lancer un entraînement GPU coûteux.
+
+```bash
+cd src/entrainement
+python3 diag_masquage.py ../../data/sft/train.jsonl
+```
+
+### Entraînement (`train_sft.py`)
+
+Entraînement SFT (LoRA) de `Qwen/Qwen3-1.7B-Base` à partir du dataset produit
+par `preparer_dataset_sft.py`. Nécessite un GPU (voir la section Phase 2 de
+`requirements.txt` : `torch`, `transformers`, `accelerate`, `peft`, `trl`).
+
+```bash
+cd src/entrainement
+python3 train_sft.py \
+    --train-file ../../data/sft/train.jsonl \
+    --val-file ../../data/sft/validation.jsonl \
+    --output-dir ../../data/sft/qwen3-1.7b-triage-lora
+```
+
 ## Tests
 
 ```bash
 pytest tests/ -v
 ```
 
-La suite actuelle couvre le module `red_flag_detector.py` (Étape 2) : seuils
-de constantes vitales, règles pédiatriques, modulateurs de motifs,
-combinaison de plusieurs red flags, et les 3 scénarios du mécanisme
-d'override (LLM sous-estime / LLM déjà prudent / aucun red flag détecté).
+- `test_red_flag_detector.py` couvre le module `red_flag_detector.py`
+  (Étape 2) : seuils de constantes vitales, règles pédiatriques, modulateurs
+  de motifs, combinaison de plusieurs red flags, et les 3 scénarios du
+  mécanisme d'override (LLM sous-estime / LLM déjà prudent / aucun red flag
+  détecté).
+- `test_lot1.py` ne fait AUCUN appel API (un faux LLM renvoie des réponses
+  prévues) et couvre le code du lot 1 : planchers de la grille, contrôle de
+  présence des constantes, lecture des réponses LLM, et file de relecture
+  (`orchestrer_pipeline.py`, `construire_referentiel_depuis_grille.py`).
 
 ## Pour lancer le pipeline
 
@@ -263,11 +384,15 @@ scripts d'ingestion.
 
 1. Vérifier précisément le schéma du subset `oeq` de MediQAl (non encore
    confirmé).
-2. Lancer le pipeline complet (Étapes 1 à 5) à l'échelle sur l'ensemble des
-   vignettes filtrées et anonymisées, au-delà des jeux de test actuels.
-3. Étendre la couverture de tests aux modules `filtre_pertinence.py`,
+2. Traiter la file de relecture humaine (`data/relecture/`) issue du premier
+   lot, et exclure/corriger les cas non relus avant de les utiliser pour
+   l'entraînement.
+3. Lancer le pipeline complet (Étapes 1 à 5) à l'échelle sur l'ensemble des
+   vignettes filtrées, anonymisées et dédoublonnées, au-delà des jeux de
+   test actuels.
+4. Étendre la couverture de tests aux modules `filtre_pertinence.py`,
    `extraction_etape1.py`, `labellisation_etape3.py`,
    `contre_validation_etape4.py`, `generation_dialogue_etape5.py` et
    `anonymiser_vignettes.py`.
-4. Constituer et documenter le jeu de données SFT final à partir des sorties
-   de `generation_dialogue_etape5.py`.
+5. Évaluer le modèle entraîné par `train_sft.py` (pas encore d'étape
+   d'évaluation formalisée) et itérer sur les hyperparamètres LoRA.
