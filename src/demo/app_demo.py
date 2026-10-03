@@ -105,7 +105,7 @@ def main():
     
     decideur = None
     if args.decideur_dir:
-        from decideur import Decideur
+        from decideur import Decideur, plancher
         decideur = Decideur(args.decideur_dir)
         print(f"Décideur chargé : {args.decideur_dir}")
 
@@ -157,6 +157,14 @@ def main():
                 contenu = " ".join(c.get("text", "") for c in contenu if isinstance(c, dict))
             messages.append({"role": m["role"], "content": contenu})
         messages.append({"role": "user", "content": message})
+        # Plancher évalué à CHAQUE message du patient, avant de laisser parler l'hôtesse :
+        # un signe d'alerte suffit à conclure, inutile de poursuivre l'entretien.
+        if decideur is not None and plancher(messages):
+            decision = decideur.decider(messages)
+            decision["source"] = "plancher_immediat"
+            print(f"[triage] plancher déclenché : {decision['signes_alerte']} -> {decision['niveau']}")
+            journaliser(messages, None, decision)
+            return decision["conclusion"]
 
         texte_entree = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
