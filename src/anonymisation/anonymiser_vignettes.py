@@ -60,7 +60,7 @@ MODELES_SPACY = {"fr": "fr_core_news_md", "en": "en_core_web_md"}
 # jamais. C'est ce qui permet de distinguer un vrai nom d'un faux positif,
 # le modèle spaCy générique ne connaissant pas le vocabulaire médical.
 TITRE_CIVILITE_REGEX = re.compile(
-    r"(monsieur|madame|mme|m\.|mlle|mademoiselle|dr\.?|docteur)\b",
+    r"\b(monsieur|madame|mme|mlle|mademoiselle|docteur|dr\.?|m\.)(?=\s|[A-Z])",
     re.IGNORECASE,
 )
 

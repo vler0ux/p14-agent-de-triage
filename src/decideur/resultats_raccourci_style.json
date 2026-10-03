@@ -1,0 +1,264 @@
+[
+  {
+    "cas": "douleur_thoracique",
+    "attendu": "urgence_maximale",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.9999,
+      "moderee": 0.0001,
+      "differee": 0.0
+    },
+    "decideur": "urgence_maximale",
+    "ecart": 0,
+    "plancher": [
+      "douleur_thoracique"
+    ]
+  },
+  {
+    "cas": "douleur_thoracique",
+    "attendu": "urgence_maximale",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.9309,
+      "moderee": 0.0032,
+      "differee": 0.0659
+    },
+    "decideur": "urgence_maximale",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "deficit_neurologique",
+    "attendu": "urgence_maximale",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.9168,
+      "moderee": 0.0267,
+      "differee": 0.0565
+    },
+    "decideur": "urgence_maximale",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "deficit_neurologique",
+    "attendu": "urgence_maximale",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.017,
+      "moderee": 0.0079,
+      "differee": 0.9751
+    },
+    "decideur": "differee",
+    "ecart": 2,
+    "plancher": []
+  },
+  {
+    "cas": "raideur_nuque_purpura",
+    "attendu": "urgence_maximale",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.9991,
+      "moderee": 0.0008,
+      "differee": 0.0
+    },
+    "decideur": "urgence_maximale",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "raideur_nuque_purpura",
+    "attendu": "urgence_maximale",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.3299,
+      "moderee": 0.1814,
+      "differee": 0.4887
+    },
+    "decideur": "urgence_maximale",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "hematemese",
+    "attendu": "urgence_maximale",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.9585,
+      "moderee": 0.041,
+      "differee": 0.0005
+    },
+    "decideur": "urgence_maximale",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "hematemese",
+    "attendu": "urgence_maximale",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.4153,
+      "moderee": 0.5392,
+      "differee": 0.0455
+    },
+    "decideur": "urgence_maximale",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "allergie_gorge",
+    "attendu": "urgence_maximale",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.6213,
+      "moderee": 0.1172,
+      "differee": 0.2615
+    },
+    "decideur": "urgence_maximale",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "allergie_gorge",
+    "attendu": "urgence_maximale",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.004,
+      "moderee": 0.0987,
+      "differee": 0.8973
+    },
+    "decideur": "differee",
+    "ecart": 2,
+    "plancher": []
+  },
+  {
+    "cas": "douleur_pelvienne_grossesse",
+    "attendu": "urgence_maximale",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.9888,
+      "moderee": 0.0088,
+      "differee": 0.0024
+    },
+    "decideur": "urgence_maximale",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "douleur_pelvienne_grossesse",
+    "attendu": "urgence_maximale",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.2571,
+      "moderee": 0.5822,
+      "differee": 0.1607
+    },
+    "decideur": "moderee",
+    "ecart": 1,
+    "plancher": []
+  },
+  {
+    "cas": "coupure_doigt",
+    "attendu": "differee",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.0057,
+      "moderee": 0.0006,
+      "differee": 0.9937
+    },
+    "decideur": "differee",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "coupure_doigt",
+    "attendu": "differee",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.0001,
+      "moderee": 0.0001,
+      "differee": 0.9998
+    },
+    "decideur": "differee",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "rhume",
+    "attendu": "differee",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.9243,
+      "moderee": 0.0636,
+      "differee": 0.0121
+    },
+    "decideur": "urgence_maximale",
+    "ecart": -2,
+    "plancher": []
+  },
+  {
+    "cas": "rhume",
+    "attendu": "differee",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.0087,
+      "moderee": 0.0611,
+      "differee": 0.9302
+    },
+    "decideur": "differee",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "entorse_cheville",
+    "attendu": "differee",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.0,
+      "moderee": 0.0001,
+      "differee": 0.9998
+    },
+    "decideur": "differee",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "entorse_cheville",
+    "attendu": "differee",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.0,
+      "moderee": 0.0001,
+      "differee": 0.9999
+    },
+    "decideur": "differee",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "piqure_guepe",
+    "attendu": "differee",
+    "style": "stresse",
+    "probas": {
+      "urgence_maximale": 0.2608,
+      "moderee": 0.0215,
+      "differee": 0.7177
+    },
+    "decideur": "differee",
+    "ecart": 0,
+    "plancher": []
+  },
+  {
+    "cas": "piqure_guepe",
+    "attendu": "differee",
+    "style": "minimise",
+    "probas": {
+      "urgence_maximale": 0.0041,
+      "moderee": 0.0007,
+      "differee": 0.9952
+    },
+    "decideur": "differee",
+    "ecart": 0,
+    "plancher": []
+  }
+]

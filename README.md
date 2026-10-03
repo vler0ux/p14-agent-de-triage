@@ -5,15 +5,15 @@ Hospitalier Saint-Aurélien (CHSA).
 
 ## Structure du projet
 
-```
+```text
 triage-poc-chsa/
-├── data/                      # Toutes les sorties de données sont ignorées par git (régénérables via les scripts)
+├── data/                      # Sorties de données ignorées par git (régénérables), SAUF data/sft/*.jsonl
 │   ├── raw/                   # Cache local / échantillons de test des corpus sources
-│   ├── normalized/            # Sorties JSONL au format "vignette normalisée" (une par source)
+│   ├── normalized/            # Sorties JSONL : vignettes normalisées, pipeline (Étapes 1-4), dialogues (Étape 5)
 │   ├── anonymized/            # Sorties JSONL anonymisées (RGPD) + journaux d'audit
 │   ├── relecture/             # Exports CSV de la file de relecture humaine (exporter_relecture.py)
-│   ├── sft/                   # Dataset conversationnel final (train/validation) pour l'entraînement SFT
-│   └── backups/               # Sauvegardes horodatées créées par sauvegarder_donnees.sh
+│   ├── sft/                   # Dataset SFT final (train.jsonl / validation.jsonl) — VERSIONNÉ (entrée du notebook Kaggle)
+│   └── dpo/                   # Paires de préférence (prompt / chosen / rejected) pour le DPO
 ├── src/
 │   ├── ingestion/
 │   │   ├── schema.py                    # Format commun de vignette normalisée
@@ -33,26 +33,49 @@ triage-poc-chsa/
 │   │   ├── dedoublonner_vignettes.py      # Regroupe les vignettes qui décrivent le même cas clinique
 │   │   ├── labellisation_etape3.py        # Étape 3 : proposition du niveau de priorité (LLM)
 │   │   ├── contre_validation_etape4.py    # Étape 4 : audit du label retenu (signalement seul, LLM "auditeur")
-│   │   ├── generation_dialogue_etape5.py  # Étape 5 : génération du dialogue patient/agent
+│   │   ├── generation_dialogue_etape5.py  # Étape 5 : dialogues patient/agent (variantes, juge de fidélité)
 │   │   ├── orchestrer_pipeline.py         # Enchaîne les Étapes 1 → 2 → 3 → 4 + file de relecture
-│   │   └── exporter_relecture.py          # Exporte les cas à relire en CSV, triés par priorité
+│   │   ├── exporter_relecture.py          # Exporte les cas à relire en CSV, triés par priorité
+│   │   ├── bilan_run.py                   # Résumé chiffré d'un run du pipeline (lecture seule)
+│   │   ├── diagnostic_final.py            # Sur-triage par rapport à la grille FRENCH (lecture seule)
+│   │   ├── nettoyer_labels_perimes.py     # Retire les dialogues dont le label ne correspond plus au pipeline
+│   │   ├── nettoyer_conclusions_ambigues.py # Retire les dialogues dont la conclusion mélange plusieurs niveaux
+│   │   ├── recalibrer_conclusions.py      # Réapplique les conclusions imposées par le code (sans appel API)
+│   │   └── preparer_dpo_ultramedical.py   # Traduit un échantillon d'UltraMedical-Preference (paires DPO, à relire)
 │   ├── anonymisation/
 │   │   └── anonymiser_vignettes.py  # Anonymisation RGPD (Presidio + spaCy fr_core_news_md)
-│   └── entrainement/
-│       ├── preparer_dataset_sft.py  # Dialogues (Étape 5) -> dataset conversationnel (format TRL / chat template Qwen3)
-│       ├── template_triage.jinja    # Chat template Qwen3 avec marqueurs {% generation %} (masquage de l'entraînement)
-│       ├── diag_masquage.py         # Diagnostic sans GPU : vérifie le masquage produit par le chat template
-│       └── train_sft.py             # Entraînement SFT (LoRA) de Qwen3-1.7B-Base
+│   ├── entrainement/
+│   │   ├── prompt_agent.py          # Prompt système de l'agent : SOURCE UNIQUE (SFT, DPO, démo)
+│   │   ├── preparer_dataset_sft.py  # Dialogues (Étape 5) -> dataset conversationnel (format TRL / chat template Qwen3)
+│   │   ├── template_triage.jinja    # Chat template Qwen3 avec marqueurs {% generation %} (masquage de l'entraînement)
+│   │   ├── diag_masquage.py         # Diagnostic sans GPU : vérifie le masquage produit par le chat template
+│   │   └── train_sft.py             # Entraînement SFT (LoRA) de Qwen3-1.7B-Base
+│   ├── dpo/
+│   │   ├── preparer_dpo_rejected.py # Génère des réponses "rejected" avec le modèle SFT (température élevée)
+│   │   ├── fusionner_dpo.py         # Fusionne les sources de paires -> train_dpo.jsonl / validation_dpo.jsonl
+│   │   └── train_dpo.py             # DPO : fusion de l'adaptateur SFT + nouveau LoRA élargi
+│   └── demo/
+│       └── app_demo.py              # Interface Gradio pour discuter avec l'agent entraîné
 ├── tests/
-│   ├── test_red_flag_detector.py     # Suite de tests unitaires (Étape 2 — 20 tests, FAIT)
-│   ├── test_lot1.py                  # Tests du lot 1 sans appel API (faux LLM) : croisement, planchers, file de relecture
+│   ├── test_red_flag_detector.py     # Étape 2 : seuils, pédiatrie, modulateurs, override
+│   ├── test_lot1.py                  # Lot 1 sans appel API (faux LLM) : croisement, planchers, file de relecture
+│   ├── test_etape5.py                # Étape 5 sans appel API (faux LLM) : contrôles, juge, reprise, ouverture/conclusion
+│   ├── test_prompt_agent.py          # Le prompt système est identique dans les datasets et à l'inférence
 │   └── golden_etape1_extraction.json # Jeu de cas de référence (Étapes 1, 3, 4)
+├── entrainement-sft-kaggle.ipynb  # Notebook d'entraînement SFT sur Kaggle (GPU T4)
 ├── run_pipeline.sh         # Script d'orchestration (ingestion + tests, option --avec-filtre)
 ├── sauvegarder_donnees.sh  # Sauvegarde horodatée de data/normalized/ et data/anonymized/
+├── pytest.ini
 ├── requirements.txt
 ├── .env.example
 └── .gitignore
 ```
+
+Ne sont **pas** versionnés (voir `.gitignore`) : les données générées (JSONL hors
+`data/sft/`), les exports HTML de relecture, les modèles entraînés
+(`qwen3-1.7b-triage-*`, checkpoints, `*.safetensors`, archives `.zip`), le
+dossier `kaggle_upload/` (copie des fichiers envoyés sur Kaggle) et les
+sauvegardes locales.
 
 ## Installation
 
@@ -62,6 +85,17 @@ source .venv/bin/activate        # Windows : .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env             # puis renseigner vos clés/tokens si nécessaire
 ```
+
+Les modèles spaCy de l'anonymisation s'installent ensuite à part :
+
+```bash
+python -m spacy download fr_core_news_md
+python -m spacy download en_core_web_md   # uniquement pour les vignettes MedQuAD (anglais)
+```
+
+`requirements.txt` contient aussi les dépendances d'entraînement (`torch`,
+`transformers`, `trl`...), lourdes et inutiles sans GPU : pour le seul
+pipeline de données, on peut commenter la section « Phase 2 ».
 
 ## Utilisation — Ingestion des corpus
 
@@ -142,13 +176,14 @@ python3 filtre_pertinence.py \
 
 Nécessite `GROQ_API_KEY` dans `.env` (clé gratuite sur console.groq.com/keys).
 
-Les Étapes 3, 4 et 5 utilisent `llm_client.py`, une couche d'abstraction
-commune à Groq et Google Gemini (`--fournisseur groq|gemini`), afin de
-pouvoir varier le modèle d'une étape à l'autre et réduire la corrélation des
-erreurs entre les jugements. Selon le fournisseur choisi, prévoir
-`GROQ_API_KEY` et/ou `GEMINI_API_KEY` dans `.env` (clé Gemini gratuite sur
-Google AI Studio — attention, les quotas du tier gratuit varient beaucoup
-selon le modèle).
+Les Étapes 1, 3, 4 et 5 utilisent `llm_client.py`, une couche d'abstraction
+commune à Groq, Google Gemini et Anthropic (`--fournisseur
+groq|gemini|anthropic`), afin de pouvoir varier le modèle d'une étape à
+l'autre et réduire la corrélation des erreurs entre les jugements. Selon le
+fournisseur choisi, prévoir `GROQ_API_KEY`, `GEMINI_API_KEY` et/ou
+`ANTHROPIC_API_KEY` dans `.env` (clé Gemini gratuite sur Google AI Studio —
+attention, les quotas du tier gratuit varient beaucoup selon le modèle ;
+l'API Anthropic est payante, facturée à l'usage).
 
 ### Étape 1 — Extraction structurée (`extraction_etape1.py`)
 
@@ -255,14 +290,60 @@ Dernière étape : à partir d'un cas structuré et du niveau de priorité déj�
 validé par les Étapes 1 à 4 (que le LLM ne doit jamais remettre en cause),
 génère un dialogue multi-tours réaliste entre un patient (expression
 naturelle et imparfaite — hésitations, ordre désordonné) et un agent de
-triage, conclu par une phrase en langage naturel (jamais de jargon type
-« priorité modérée »). Prend en entrée la sortie de `orchestrer_pipeline.py`.
+triage. Prend en entrée la sortie de `orchestrer_pipeline.py` ; les cas
+marqués `a_relire` sont exclus. Anthropic (Claude Haiku) par défaut,
+température 0,8.
+
+- **Variantes** : plusieurs dialogues par cas selon le label (défaut : 1
+  urgence maximale, 2 modérée, 3 différée), chacun avec un style de patient
+  différent, pour rééquilibrer les classes sans toucher aux labels. Les
+  variantes d'un même cas partagent `cas_id`.
+- **Phrases imposées par le code** : la première phrase de l'agent (selon
+  `--contexte appel|accueil`) et la conclusion sont tirées de listes fixes, de
+  façon reproductible (id du cas + variante). La balise
+  `[[PRIORITE: <categorie>]]` est calculée depuis le label validé, jamais par
+  le LLM.
+- **Contrôles automatiques** avec nouvelle tentative (`--essais`, défaut 3) :
+  alternance des tours, 4 à 8 échanges, aucun nom propre ni marqueur
+  d'anonymisation, aucune valeur chiffrée de constante vitale, aucun jargon.
+- **Juge de fidélité** : un second appel LLM repère les éléments cliniques
+  inventés par le patient ; un élément d'importance « médicale » fait refuser
+  le dialogue (`--sans-juge` pour le désactiver, déconseillé).
+- Reprise automatique : les couples (id, variante) réussis sont sautés, les
+  échecs (`_erreur`) sont retentés.
 
 ```bash
 cd src/generation
 python3 generation_dialogue_etape5.py \
-    --input ../../data/normalized/mediqal_mcqm_pipeline_complet.jsonl \
-    --output ../../data/normalized/mediqal_mcqm_dialogues.jsonl
+    --input ../../data/normalized/pipeline_473.jsonl \
+    --output ../../data/normalized/dialogues_473.jsonl
+# essai : --limit 3 ; moins de variantes : --variantes urgence_maximale=1,moderee=1,differee=2
+```
+
+### Maintenance des dialogues déjà générés
+
+Scripts sans appel API, à lancer avant de relancer l'Étape 5 (qui régénère
+alors les entrées retirées grâce à la reprise) :
+
+```bash
+cd src/generation
+# dialogues dont le label ne correspond plus au pipeline actuel (mis de côté dans *_perimes.jsonl)
+python3 nettoyer_labels_perimes.py \
+    --dialogues ../../data/normalized/dialogues_473.jsonl \
+    --pipeline ../../data/normalized/pipeline_473.jsonl
+# conclusions qui mélangent le vocabulaire de plusieurs niveaux
+python3 nettoyer_conclusions_ambigues.py --dialogues ../../data/normalized/dialogues_473.jsonl
+# réapplique les conclusions imposées par le code et retire les cas a_relire
+python3 recalibrer_conclusions.py --dialogues ../../data/normalized/dialogues_473.jsonl
+```
+
+### Diagnostics d'un run (lecture seule)
+
+```bash
+cd src/generation
+python3 bilan_run.py          # échecs, répartition des labels, file de relecture, extraction, audit
+python3 diagnostic_final.py   # position des labels par rapport aux planchers de la grille (sur-triage)
+# autre fichier : FICHIER=../../data/normalized/autre_pipeline.jsonl python3 bilan_run.py
 ```
 
 ### Anonymisation RGPD (`anonymiser_vignettes.py`)
@@ -281,8 +362,8 @@ python3 anonymiser_vignettes.py \
     --audit ../../data/anonymized/mediqal_mcqm_train_audit.jsonl
 ```
 
-Prérequis : `pip install presidio-analyzer presidio-anonymizer spacy` puis
-`python -m spacy download fr_core_news_md`.
+Prérequis : Presidio et spaCy sont dans `requirements.txt` ; le modèle
+français s'installe avec `python -m spacy download fr_core_news_md`.
 
 ## Référentiel FRENCH
 
@@ -309,15 +390,22 @@ python3 construire_referentiel_depuis_grille.py \
 
 Transforme les dialogues générés (sortie de `generation_dialogue_etape5.py`)
 en dataset conversationnel `{"messages": [...]}` compatible avec le chat
-template de Qwen3 et le format attendu par TRL (`SFTTrainer`), avec un split
-train/validation reproductible (graine fixée).
+template de Qwen3 et le format attendu par TRL (`SFTTrainer`). Le prompt
+système vient de `prompt_agent.py` (source unique, aussi utilisée par le DPO
+et la démo). Le message final de l'agent se termine par la balise
+`[[PRIORITE: <categorie>]]` sur sa propre ligne. Le découpage
+train/validation se fait **par cas** (`cas_id`) : toutes les variantes d'un
+même cas vont du même côté, sans fuite (graine fixée).
 
 ```bash
 cd src/entrainement
 python3 preparer_dataset_sft.py \
-    --input ../../data/normalized/mediqal_mcqm_dialogues.jsonl \
+    --input ../../data/normalized/dialogues_473.jsonl \
     --output-dir ../../data/sft --val-ratio 0.1
 ```
+
+Modifier `prompt_agent.py` impose de régénérer les datasets et de réentraîner
+(`test_prompt_agent.py` le vérifie).
 
 ### Diagnostic du masquage (`diag_masquage.py`)
 
@@ -342,24 +430,98 @@ cd src/entrainement
 python3 train_sft.py \
     --train-file ../../data/sft/train.jsonl \
     --val-file ../../data/sft/validation.jsonl \
-    --output-dir ../../data/sft/qwen3-1.7b-triage-lora
+    --output-dir ../../qwen3-1.7b-triage-sft \
+    --max-steps 5   # smoke test d'abord, puis sans --max-steps
 ```
+
+La précision (`--precision auto`) choisit bf16 sur GPU Ampere ou plus récent,
+fp16 sinon (ex. T4). Le script affiche au démarrage le nombre de tokens
+appris (`[masquage] tokens appris : N/M`) : seuls les tours de l'agent doivent
+l'être.
+
+### Entraînement sur Kaggle (`entrainement-sft-kaggle.ipynb`)
+
+Le notebook lance `train_sft.py` sur un GPU T4 Kaggle. Il attend un Dataset
+Kaggle contenant à sa racine `train_sft.py`, `template_triage.jinja`,
+`train.jsonl` et `validation.jsonl` (copies préparées dans `kaggle_upload/`,
+non versionné). L'adaptateur entraîné est à télécharger puis dézipper en local
+(ex. `qwen3-1.7b-triage-sft/`).
+
+## Alignement DPO (expérimental)
+
+Le DPO (Direct Preference Optimization) corrige des dérives observées sur le
+modèle SFT (réponses dans une autre langue, JSON qui fuit) à partir de paires
+« chosen » (réponse attendue) / « rejected » (réponse à éviter).
+
+```bash
+# 1. Réponses "rejected" générées par le modèle SFT sur des contextes de train.jsonl
+cd src/dpo
+python3 preparer_dpo_rejected.py --adapter-dir ../../qwen3-1.7b-triage-sft \
+    --train-file ../../data/sft/train.jsonl --n 50 \
+    --output ../../data/dpo/rejected_sft_a_relire.jsonl
+
+# 2. (optionnel) paires UltraMedical-Preference traduites en français, à relire
+cd ../generation
+python3 preparer_dpo_ultramedical.py --inspecter-seulement
+python3 preparer_dpo_ultramedical.py --n 180 --output ../../data/dpo/ultramedical_fr_a_relire.jsonl
+
+# 3. Fusion + découpage train/validation par cas
+cd ../dpo
+python3 fusionner_dpo.py \
+    --rejected-sft ../../data/dpo/rejected_sft_a_relire.jsonl \
+    --ultramedical ../../data/dpo/ultramedical_fr_a_relire.jsonl \
+    --output-dir ../../data/dpo
+
+# 4. Entraînement (smoke test d'abord)
+python3 train_dpo.py --adapter-sft-dir ../../qwen3-1.7b-triage-sft \
+    --train-file ../../data/dpo/train_dpo.jsonl \
+    --val-file ../../data/dpo/validation_dpo.jsonl \
+    --output-dir ../../qwen3-1.7b-triage-dpo --max-steps 5
+```
+
+Seules les paires UltraMedical marquées `a_valider=true` après relecture
+humaine sont retenues par `fusionner_dpo.py`. `train_dpo.py` fusionne
+l'adaptateur SFT dans le modèle de base avant d'ajouter un nouveau LoRA :
+l'adaptateur DPO enregistré ne s'utilise donc **pas** seul sur le modèle de
+base (utiliser `--merge-adapter` pour obtenir un modèle complet).
+
+## Démonstration (`app_demo.py`)
+
+Interface Gradio pour discuter avec l'agent entraîné (base Qwen3-1.7B +
+adaptateur LoRA SFT), avec le même prompt système et le même chat template
+qu'à l'entraînement. La balise de priorité est retirée de la réponse affichée
+et écrite dans le terminal.
+
+```bash
+cd src/demo
+python3 app_demo.py --adapter-dir ../../qwen3-1.7b-triage-sft
+# puis ouvrir http://127.0.0.1:7860 ; --share pour un lien public temporaire
+```
+
+⚠️ POC de démonstration : ne constitue pas une décision médicale validée.
 
 ## Tests
 
 ```bash
-pytest tests/ -v
+pytest -v        # depuis la racine (pytest.ini : testpaths = tests)
 ```
 
+Aucun test ne fait d'appel API.
+
 - `test_red_flag_detector.py` couvre le module `red_flag_detector.py`
-  (Étape 2) : seuils de constantes vitales, règles pédiatriques, modulateurs
-  de motifs, combinaison de plusieurs red flags, et les 3 scénarios du
-  mécanisme d'override (LLM sous-estime / LLM déjà prudent / aucun red flag
-  détecté).
-- `test_lot1.py` ne fait AUCUN appel API (un faux LLM renvoie des réponses
-  prévues) et couvre le code du lot 1 : planchers de la grille, contrôle de
-  présence des constantes, lecture des réponses LLM, et file de relecture
+  (Étape 2) : seuils de constantes vitales adulte et pédiatriques par tranche
+  d'âge, règles pédiatriques, modulateurs de motifs (y compris à la baisse),
+  combinaison de plusieurs red flags, et les scénarios du mécanisme
+  d'override.
+- `test_lot1.py` utilise un faux LLM qui renvoie des réponses prévues et
+  couvre le code du lot 1 : planchers de la grille, contrôle de présence des
+  constantes, lecture des réponses LLM, et file de relecture
   (`orchestrer_pipeline.py`, `construire_referentiel_depuis_grille.py`).
+- `test_etape5.py` couvre l'Étape 5 avec un faux LLM : contrôles de
+  structure et de contenu, ouverture et conclusion imposées, juge de
+  fidélité, nouvelles tentatives, reprise et options de la ligne de commande.
+- `test_prompt_agent.py` vérifie que les datasets SFT/DPO ont été produits
+  avec le prompt système actuel de `prompt_agent.py`.
 
 ## Pour lancer le pipeline
 
@@ -387,12 +549,15 @@ scripts d'ingestion.
 2. Traiter la file de relecture humaine (`data/relecture/`) issue du premier
    lot, et exclure/corriger les cas non relus avant de les utiliser pour
    l'entraînement.
-3. Lancer le pipeline complet (Étapes 1 à 5) à l'échelle sur l'ensemble des
-   vignettes filtrées, anonymisées et dédoublonnées, au-delà des jeux de
-   test actuels.
+3. Faire valider par un urgentiste les conclusions imposées par le code
+   (en particulier « urgence maximale » en contexte d'appel téléphonique) et
+   les modulateurs appliqués à la baisse.
 4. Étendre la couverture de tests aux modules `filtre_pertinence.py`,
    `extraction_etape1.py`, `labellisation_etape3.py`,
-   `contre_validation_etape4.py`, `generation_dialogue_etape5.py` et
-   `anonymiser_vignettes.py`.
-5. Évaluer le modèle entraîné par `train_sft.py` (pas encore d'étape
-   d'évaluation formalisée) et itérer sur les hyperparamètres LoRA.
+   `contre_validation_etape4.py` et `anonymiser_vignettes.py`.
+5. Évaluer le modèle entraîné (pas encore d'étape d'évaluation formalisée :
+   précision de la balise de priorité sur la validation, taux de
+   sous-triage) et itérer sur les hyperparamètres LoRA.
+6. DPO : relire les paires avant l'entraînement et régénérer les réponses
+   « rejected » avec le modèle SFT actuel (qui produit la balise de
+   priorité).

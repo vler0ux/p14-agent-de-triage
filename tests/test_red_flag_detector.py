@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "referentiel"))
 
 import pytest
 from red_flag_detector import (
+    TRANCHES_PEDIATRIQUES,
     CasClinique,
     charger_referentiel,
     detecter_red_flags,
@@ -110,6 +111,65 @@ def test_fievre_nourrisson_plus_3_mois_ne_force_pas_la_regle_specifique(referent
     cas = CasClinique(age_annees=1.5, fievre=True)
     resultat = detecter_red_flags(cas, referentiel)
     assert not any("fievre_nourrisson_3_mois" in f for f in resultat.flags_declenches)
+
+
+def test_tranches_pediatriques_identiques_au_referentiel(referentiel):
+    """Les seuils codés dans le module doivent rester ceux du JSON."""
+    tranches_json = referentiel["constantes_vitales_pediatrie"]["tranches_age"]
+    assert len(tranches_json) == len(TRANCHES_PEDIATRIQUES)
+    for t_json, (_, pas_min, fc_max, fr_max) in zip(tranches_json, TRANCHES_PEDIATRIQUES):
+        assert t_json["pas_hypotension_mmHg"] == f"< {pas_min}"
+        assert t_json["fc_tachycardie_min"] == f"> {fc_max}"
+        assert t_json["fr_polypnee_min"] == f"> {fr_max}"
+
+
+def test_enfant_spo2_effondree_force_tri1(referentiel):
+    """Avant le correctif, aucune constante n'était contrôlée avant 15 ans."""
+    resultat = detecter_red_flags(CasClinique(age_annees=8, spo2_pct=80), referentiel)
+    assert resultat.tri_constantes == "1"
+
+
+def test_enfant_gcs_bas_force_tri1(referentiel):
+    resultat = detecter_red_flags(CasClinique(age_annees=5, gcs=7), referentiel)
+    assert resultat.tri_constantes == "1"
+
+
+@pytest.mark.parametrize("age, champ, valeur", [
+    (0.05, "fc_min", 185),   # < 1 mois : FC > 180
+    (1, "fr_min", 45),       # 1 mois - 2 ans : FR > 40
+    (5, "pas_mmhg", 65),     # 2 - 10 ans : PAS < 70
+    (12, "fc_min", 125),     # > 10 ans : FC > 120
+])
+def test_enfant_constante_hors_seuil_de_l_age_force_tri2(referentiel, age, champ, valeur):
+    resultat = detecter_red_flags(CasClinique(age_annees=age, **{champ: valeur}), referentiel)
+    assert resultat.tri_constantes == "2"
+    assert any(f.startswith("Pédiatrie") for f in resultat.flags_declenches)
+
+
+def test_nourrisson_fc_normale_pour_l_age_ne_declenche_rien(referentiel):
+    """FC 150 : tri 2 chez l'adulte (130-180), normale à 6 mois (seuil 160)."""
+    resultat = detecter_red_flags(CasClinique(age_annees=0.5, fc_min=150), referentiel)
+    assert resultat.tri_constantes is None
+
+
+def test_borne_de_tranche_bascule_dans_la_tranche_la_plus_agee(referentiel):
+    """À 2 ans pile, seuils des 2-10 ans (FC > 130), plus sensibles que ceux des 1 mois - 2 ans (> 160)."""
+    resultat = detecter_red_flags(CasClinique(age_annees=2, fc_min=140), referentiel)
+    assert resultat.tri_constantes == "2"
+
+
+@pytest.mark.parametrize("age, fc, attendu", [(0.5, 75, "2"), (0.5, 90, None), (5, 55, "2"), (5, 70, None)])
+def test_bradycardie_pediatrique(referentiel, age, fc, attendu):
+    resultat = detecter_red_flags(CasClinique(age_annees=age, fc_min=fc), referentiel)
+    assert resultat.tri_constantes == attendu
+
+
+def test_enfant_constante_absente_du_texte_ignoree(referentiel):
+    """Le contrôle de présence s'applique aussi aux enfants."""
+    cas = CasClinique(age_annees=8, spo2_pct=80)
+    resultat = detecter_red_flags(cas, referentiel, texte_source="Enfant de 8 ans, toux depuis 3 jours.")
+    assert resultat.tri_constantes is None
+    assert resultat.constantes_non_verifiees == ["spo2_pct=80"]
 
 
 # ---------------------------------------------------------------------------

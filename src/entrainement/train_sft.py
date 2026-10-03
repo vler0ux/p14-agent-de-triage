@@ -88,6 +88,7 @@ def main():
     sft_config = SFTConfig(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         learning_rate=args.learning_rate,
         num_train_epochs=args.num_epochs,
@@ -98,11 +99,18 @@ def main():
         eval_strategy="steps" if args.val_file else "no",
         eval_steps=args.save_steps if args.val_file else None,
         seed=args.seed,
-        bf16=torch.cuda.is_available(),
+        # Précision mixte alignée sur --precision (avant : bf16 dès qu'un GPU était présent,
+        # même sur un T4 où le modèle est chargé en fp16 -> bf16 émulé, lent).
+        bf16=cuda and precision == "bf16",
+        fp16=cuda and precision == "fp16",
         report_to=[],
         dataset_text_field="text",
         chat_template_path=str(CHAT_TEMPLATE_PATH),
         assistant_only_loss=True,
+        # Contourne un bug de TRL (chunked_nll par défaut) : SFTTrainer.__init__ plante avec
+        # "'functools.partial' object has no attribute '__func__'" lors du patch de la loss "chunkée".
+        # nll = calcul classique, sans ce chemin de code. Voir la note du 24/09 pour le détail.
+        loss_type="nll",
     )
 
     trainer = SFTTrainer(

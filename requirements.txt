@@ -1,19 +1,35 @@
 # Phase 1 — Ingestion et normalisation des corpus
-# (installation minimale : pas de dépendances GPU/ML à ce stade)
-
-datasets>=2.19.0
+datasets>=4.7.0
 huggingface_hub>=0.23.0
 pandas>=2.2.0
 python-dotenv>=1.0.0
 tqdm>=4.66.0
 
-# Décommenter selon le LLM teacher choisi pour les Étapes 1/3/4/5 :
-anthropic>=0.34.0
-# openai>=1.40.0
+# Fournisseurs LLM (llm_client.py) — Étapes 0 à 5 et traduction UltraMedical
+anthropic>=0.34.0      # défaut des Étapes 1, 3 et 5 (API payante)
+groq>=0.9.0            # Étape 0 (filtre de pertinence) et Étape 4 (audit)
+google-genai>=1.0.0    # fournisseur "gemini" (nouveau SDK, pas google-generativeai qui est déprécié)
 
-# Phase 2 — Entraînement SFT (train_sft.py) : nécessite un GPU pour un entraînement réel
+# Anonymisation RGPD (anonymiser_vignettes.py)
+presidio-analyzer>=2.2.0
+presidio-anonymizer>=2.2.0
+spacy>=3.7.0
+# Modèles spaCy à télécharger après l'installation :
+#   python -m spacy download fr_core_news_md
+#   python -m spacy download en_core_web_md   # vignettes MedQuAD (anglais)
+
+# Phase 2 — Entraînement SFT / DPO : nécessite un GPU pour un entraînement réel.
+# Versions minimales alignées sur le notebook Kaggle (entrainement-sft-kaggle.ipynb) : train_sft.py
+# utilise assistant_only_loss, chat_template_path et loss_type="nll" (TRL récent) et dtype= (transformers 5).
 torch>=2.3.0
-transformers>=4.44.0
-accelerate>=0.33.0
+transformers>=5.17.0
+accelerate>=1.4.0
 peft>=0.12.0
-trl>=0.9.6
+trl>=1.13.0
+scikit-learn>=1.3.0  # métriques du décideur (train_decideur.py)
+
+# Démo (app_demo.py)
+gradio>=5.0.0
+
+# Tests
+pytest>=8.0.0

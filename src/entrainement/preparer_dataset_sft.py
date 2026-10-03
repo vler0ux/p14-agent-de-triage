@@ -15,8 +15,13 @@ Format de sortie, une ligne JSONL par exemple :
         {"role": "assistant", "content": "..."}    # conclusion finale
       ],
       "id": "...",                    # conservé pour traçabilité, ignoré par l'entraînement
+      "cas_id": "...",                # cas source : le découpage train / validation se fait PAR CAS
+      "variante": 0,                  # idem traçabilité
       "categorie_finale": "..."       # idem
     }
+
+Le message final de l'agent se termine par la balise de catégorie (champ `balise` de l'Étape 5), sur sa propre ligne :
+    « ...on va vous voir rapidement, dans la journée.\n[[PRIORITE: moderee]] »
 
 Note de conception : dans ce format, "assistant" = l'agent de triage (le
 rôle que le modèle final devra jouer en production), "user" = le patient.
@@ -37,13 +42,8 @@ import random
 import sys
 from pathlib import Path
 
-SYSTEM_PROMPT = (
-    "Tu es un agent de triage médical au Centre Hospitalier Saint-Aurélien (CHSA). "
-    "Ton rôle est de recueillir les symptômes du patient par des questions ciblées, "
-    "claires et rassurantes, puis de conclure en indiquant le niveau de prise en "
-    "charge nécessaire, dans un langage humain et compréhensible — jamais de jargon "
-    "médical ou administratif."
-)
+sys.path.insert(0, str(Path(__file__).parent))
+from prompt_agent import PROMPT_SYSTEME_AGENT as SYSTEM_PROMPT  # noqa: E402
 
 
 def convertir_en_messages(entree: dict) -> list:
@@ -65,6 +65,9 @@ def convertir_en_messages(entree: dict) -> list:
 
     conclusion = entree.get("conclusion", "").strip()
     if conclusion:
+        balise = (entree.get("balise") or "").strip()
+        if balise:
+            conclusion = f"{conclusion}\n{balise}"
         messages.append({"role": "assistant", "content": conclusion})
 
     return messages
@@ -126,6 +129,8 @@ def main():
                 exemples_valides.append({
                     "messages": messages,
                     "id": entree.get("id"),
+                    "cas_id": entree.get("cas_id") or entree.get("id"),
+                    "variante": entree.get("variante", 0),
                     "categorie_finale": entree.get("categorie_finale"),
                 })
 
@@ -137,12 +142,23 @@ def main():
               f"Ce dataset ne devrait servir qu'à un test de mécanique du pipeline, "
               f"pas à un entraînement de qualité.", file=sys.stderr)
 
+    # Découpage PAR CAS : toutes les variantes d'un même cas vont du même côté, sinon la validation
+    # contient des quasi-doublons de l'entraînement et la eval_loss est optimiste.
+    par_cas = {}
+    for ex in exemples_valides:
+        par_cas.setdefault(ex["cas_id"], []).append(ex)
+    cas_ids = sorted(par_cas)
     random.seed(args.seed)
-    random.shuffle(exemples_valides)
+    random.shuffle(cas_ids)
 
-    n_val = max(1, round(len(exemples_valides) * args.val_ratio)) if len(exemples_valides) >= 10 else 0
-    val_set = exemples_valides[:n_val]
-    train_set = exemples_valides[n_val:]
+    n_val_cas = max(1, round(len(cas_ids) * args.val_ratio)) if len(cas_ids) >= 10 else 0
+    ids_val = set(cas_ids[:n_val_cas])
+    val_set = [ex for c in cas_ids[:n_val_cas] for ex in par_cas[c]]
+    train_set = [ex for c in cas_ids[n_val_cas:] for ex in par_cas[c]]
+    random.shuffle(train_set)
+    random.shuffle(val_set)
+    assert not ids_val & {ex["cas_id"] for ex in train_set}, "fuite : un cas est présent dans train et validation"
+    print(f"\nDécoupage par cas : {len(cas_ids)} cas ({n_val_cas} en validation).", file=sys.stderr)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -1,16 +1,51 @@
+# --- Secrets ---
 .env
+
+# --- Environnements Python ---
+.venv/
+venv/
+ENV/
+agent_triage/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Données (régénérables via les scripts) ---
 data/raw/
 data/normalized/
 data/anonymized/
 data/relecture/
-data/sft/
-__pycache__/
-*.pyc
-.venv/
-venv/
-*.egg-info/
-agent_triage/
-ENV/
+data/dpo/
+dialogues/
+# Journaux (conversations de la démo, logs de traduction / pipeline) : tout dossier logs/, où qu'il soit
+logs/
+*.log
+# Tout fichier JSONL hors du dataset SFT (sorties de pipeline, dialogues, fichiers de nettoyage *_perimes / *_nettoye...)
+*.jsonl
+*.jsonl.avant_nettoyage
+# Exception : le dataset SFT final est versionné (il sert d'entrée au notebook Kaggle).
+# Le reste de data/sft/ (adaptateurs entraînés par train_sft.py, etc.) reste ignoré.
+data/sft/*
+!data/sft/train.jsonl
+!data/sft/validation.jsonl
+
+# --- Exports HTML de relecture / démonstration (contiennent des dialogues générés) ---
+demo_dialogues.html
+relecture_medecins.html
+
+# --- Modèles entraînés, checkpoints, archives (plusieurs centaines de Mo chacun) ---
+*qwen3-1.7b-triage-*/
+checkpoint-*/
+*.safetensors
+*.bin
+*.zip
+
+# --- Copie des fichiers envoyés sur Kaggle (duplique src/entrainement/ et data/sft/) ---
+kaggle_upload/
+
+# --- Sauvegardes locales ---
 backups/
 archives/
 sauvegarde_avant_correctif_citations/

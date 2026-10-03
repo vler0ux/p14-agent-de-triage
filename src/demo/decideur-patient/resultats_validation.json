@@ -1,0 +1,93 @@
+{
+  "parametres": {
+    "data_dir": "/kaggle/input/datasets/veroniqueleroux/patient",
+    "output_dir": "/kaggle/working/decideur-patient",
+    "modele": "almanach/ModernCamemBERT-bio-v2-base",
+    "max_length": 768,
+    "learning_rate": 5e-05,
+    "num_epochs": 4,
+    "batch_size": 16,
+    "warmup_ratio": 0.1,
+    "weight_decay": 0.01,
+    "seed": 42,
+    "seuil_urgence": 0.3
+  },
+  "argmax": {
+    "exactitude": 0.8317757009345794,
+    "f1_macro": 0.8204249013220771,
+    "rappel_urgence_maximale": 0.9333333333333333,
+    "rappel_moderee": 0.696969696969697,
+    "rappel_differee": 0.8275862068965517,
+    "taux_sous_triage": 0.07476635514018691,
+    "taux_sur_triage": 0.09345794392523364,
+    "matrice_confusion": [
+      [
+        42,
+        2,
+        1
+      ],
+      [
+        5,
+        23,
+        5
+      ],
+      [
+        2,
+        3,
+        24
+      ]
+    ]
+  },
+  "seuil_0.3": {
+    "exactitude": 0.8598130841121495,
+    "f1_macro": 0.8450274251306986,
+    "rappel_urgence_maximale": 1.0,
+    "rappel_moderee": 0.696969696969697,
+    "rappel_differee": 0.8275862068965517,
+    "taux_sous_triage": 0.04672897196261682,
+    "taux_sur_triage": 0.09345794392523364,
+    "matrice_confusion": [
+      [
+        45,
+        0,
+        0
+      ],
+      [
+        5,
+        23,
+        5
+      ],
+      [
+        2,
+        3,
+        24
+      ]
+    ]
+  },
+  "reference_toujours_urgence": {
+    "exactitude": 0.4205607476635514,
+    "f1_macro": 0.19736842105263155,
+    "rappel_urgence_maximale": 1.0,
+    "rappel_moderee": 0.0,
+    "rappel_differee": 0.0,
+    "taux_sous_triage": 0.0,
+    "taux_sur_triage": 0.5794392523364486,
+    "matrice_confusion": [
+      [
+        45,
+        0,
+        0
+      ],
+      [
+        33,
+        0,
+        0
+      ],
+      [
+        29,
+        0,
+        0
+      ]
+    ]
+  }
+}

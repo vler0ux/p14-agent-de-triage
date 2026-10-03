@@ -32,6 +32,10 @@ une décision clinique réelle.
    `constantes_non_verifiees`.
 4. Glycémie : signalée seulement au-dessus de 20 mmol/l (sans effet sur le
    niveau : la cétose n'est pas modélisée).
+5. Pédiatrie (< 15 ans) : avant, AUCUNE constante n'était contrôlée chez l'enfant.
+   Maintenant : SpO2 et GCS avec les seuils adulte ; PAS / FC / FR avec les seuils
+   par tranche d'âge du référentiel (tri 2, à valider par un pédiatre) ; bradycardie
+   (FC <= 80 avant 1 an, <= 60 après) d'après le motif FRENCH correspondant.
 Le shock index n'est volontairement PAS implémenté (cf. french_referentiel.json,
 meta.validation.non_implemente_volontairement).
 """
@@ -55,6 +59,30 @@ MAPPING_CATEGORIES_BRIEF = {
 }
 
 ORDRE_CATEGORIE_BRIEF = {"urgence_maximale": 1, "moderee": 2, "differee": 3}
+
+# Seuils pédiatriques par tranche d'âge, recopiés de
+# french_referentiel.json > constantes_vitales_pediatrie.tranches_age (un test
+# vérifie que les deux restent identiques). Chaque tuple :
+#   (âge maximal EXCLU en années, PAS hypotension si <, FC tachycardie si >, FR polypnée si >)
+# Aux bornes (1 mois, 2 ans, 10 ans), l'enfant bascule dans la tranche la plus
+# âgée, dont les seuils sont les plus sensibles : choix prudent.
+TRANCHES_PEDIATRIQUES = [
+    (1 / 12, 50, 180, 60),        # < 1 mois
+    (2, 65, 160, 40),             # 1 mois - 2 ans
+    (10, 70, 130, 30),            # 2 - 10 ans
+    (float("inf"), 80, 120, 20),  # > 10 ans (jusqu'à 15 ans, seuil de l'âge pédiatrique)
+]
+# Le référentiel ne donne pas de niveau de tri pour ces seuils : tri 2 retenu
+# (comme la tachycardie 130-180 de l'adulte). À valider par un pédiatre.
+TRI_CONSTANTE_PEDIATRIQUE = "2"
+
+
+def _tranche_pediatrique(age_annees: float) -> tuple:
+    """Seuils (PAS, FC, FR) de la tranche d'âge de l'enfant."""
+    for age_max, pas_min, fc_max, fr_max in TRANCHES_PEDIATRIQUES:
+        if age_annees < age_max:
+            return pas_min, fc_max, fr_max
+    raise ValueError(f"âge hors tranches : {age_annees}")
 
 
 def charger_referentiel(chemin: str = "french_referentiel.json") -> dict:
@@ -164,7 +192,8 @@ def detecter_red_flags(cas: CasClinique, referentiel: dict, texte_source: Option
     Étape 2 du pipeline : détection déterministe, indépendante du LLM.
 
     Applique successivement :
-    1. Les seuils de constantes vitales (adulte ou pédiatrie selon l'âge).
+    1. Les seuils de constantes vitales : PAS / FC / FR adulte, ou par tranche
+       d'âge avant 15 ans ; SpO2 / GCS / glycémie identiques à tout âge.
     2. Les règles pédiatriques spécifiques (ex. fièvre <= 3 mois).
     3. Le tri du motif de recours identifié en Étape 1 (base + modulateurs).
 
@@ -191,17 +220,17 @@ def detecter_red_flags(cas: CasClinique, referentiel: dict, texte_source: Option
             return None
         return valeur
 
-    # --- 1. Constantes vitales adulte ---
+    pas = _retenue("pas_mmhg")
+    fc = _retenue("fc_min")
+    spo2 = _retenue("spo2_pct")
+    fr = _retenue("fr_min")
+    gcs = _retenue("gcs")
+    glycemie = _retenue("glycemie_mmol_l")
+
+    # --- 1a. Constantes vitales adulte (PAS, FC, FR) ---
     # Règles codées explicitement (plus sûr qu'un parsing automatique des
     # conditions textuelles du JSON, qui restent indicatives / documentaires).
     if not est_pediatrique:
-        pas = _retenue("pas_mmhg")
-        fc = _retenue("fc_min")
-        spo2 = _retenue("spo2_pct")
-        fr = _retenue("fr_min")
-        gcs = _retenue("gcs")
-        glycemie = _retenue("glycemie_mmol_l")
-
         if pas is not None:
             if pas < 70:
                 tri_constantes = _plus_urgent(tri_constantes, "1")
@@ -218,14 +247,6 @@ def detecter_red_flags(cas: CasClinique, referentiel: dict, texte_source: Option
                 tri_constantes = _plus_urgent(tri_constantes, "2")
                 flags.append("FC 130-180/min")
 
-        if spo2 is not None:
-            if spo2 < 86:
-                tri_constantes = _plus_urgent(tri_constantes, "1")
-                flags.append("SpO2 < 86%")
-            elif spo2 <= 90:
-                tri_constantes = _plus_urgent(tri_constantes, "2")
-                flags.append("SpO2 86-90%")
-
         if fr is not None:
             # NB : "30-40 = tri 2" est appliqué ici à tous les motifs, comme dans
             # le JSON ; à valider (cf. meta.validation du référentiel).
@@ -236,20 +257,52 @@ def detecter_red_flags(cas: CasClinique, referentiel: dict, texte_source: Option
                 tri_constantes = _plus_urgent(tri_constantes, "2")
                 flags.append("FR 30-40/min")
 
-        if gcs is not None:
-            if gcs <= 8:
-                tri_constantes = _plus_urgent(tri_constantes, "1")
-                flags.append("GCS <= 8")
-            elif 9 <= gcs <= 13:
-                tri_constantes = _plus_urgent(tri_constantes, "2")
-                flags.append("GCS 9-13")
+    # --- 1b. Constantes vitales pédiatriques (PAS, FC, FR selon la tranche d'âge) ---
+    if est_pediatrique:
+        pas_min, fc_max, fr_max = _tranche_pediatrique(cas.age_annees)
+        tri_p = TRI_CONSTANTE_PEDIATRIQUE
+        if pas is not None and pas < pas_min:
+            tri_constantes = _plus_urgent(tri_constantes, tri_p)
+            flags.append(f"Pédiatrie : PAS < {pas_min} mmHg pour l'âge")
+        if fc is not None and fc > fc_max:
+            tri_constantes = _plus_urgent(tri_constantes, tri_p)
+            flags.append(f"Pédiatrie : FC > {fc_max}/min pour l'âge")
+        # Bradycardie : critère du motif FRENCH « bradycardie pédiatrie ≤ 2 ans »
+        # (avant 1 an FC ≤ 80, après 1 an FC ≤ 60 -> tri 2), étendu à tout âge pédiatrique.
+        seuil_brady = 80 if cas.age_annees < 1 else 60
+        if fc is not None and fc <= seuil_brady:
+            tri_constantes = _plus_urgent(tri_constantes, "2")
+            flags.append(f"Pédiatrie : FC <= {seuil_brady}/min (bradycardie)")
+        if fr is not None and fr > fr_max:
+            tri_constantes = _plus_urgent(tri_constantes, tri_p)
+            flags.append(f"Pédiatrie : FR > {fr_max}/min pour l'âge")
 
-        if glycemie is not None and glycemie > 20:
-            # Simplifié : la cétose n'est pas modélisée (donnée rarement
-            # disponible à l'accueil). Signalement seul, sans effet sur le niveau.
-            flags.append("Glycémie > 20 mmol/l (à confirmer avec cétose)")
+    # --- 1c. Constantes sans seuil lié à l'âge (SpO2, GCS, glycémie) : tous âges ---
+    if spo2 is not None:
+        if spo2 < 86:
+            tri_constantes = _plus_urgent(tri_constantes, "1")
+            flags.append("SpO2 < 86%")
+        elif spo2 <= 90:
+            tri_constantes = _plus_urgent(tri_constantes, "2")
+            flags.append("SpO2 86-90%")
+
+    if gcs is not None:
+        if gcs <= 8:
+            tri_constantes = _plus_urgent(tri_constantes, "1")
+            flags.append("GCS <= 8")
+        elif 9 <= gcs <= 13:
+            tri_constantes = _plus_urgent(tri_constantes, "2")
+            flags.append("GCS 9-13")
+
+    if glycemie is not None and glycemie > 20:
+        # Simplifié : la cétose n'est pas modélisée (donnée rarement
+        # disponible à l'accueil). Signalement seul, sans effet sur le niveau.
+        flags.append("Glycémie > 20 mmol/l (à confirmer avec cétose)")
 
     # --- 2. Règles pédiatriques spécifiques ---
+    # (la règle « diarrhée/vomissements <= 6 mois » du référentiel n'est pas une
+    # constante : elle est couverte par le modulateur « ≤ 6 mois » du motif
+    # diarrhee_vomissements_du_nourrisson_24_mois.)
     if est_pediatrique:
         for regle in referentiel["constantes_vitales_pediatrie"]["regles_specifiques"]:
             if regle["id"] == "fievre_nourrisson_3_mois":

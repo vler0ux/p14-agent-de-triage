@@ -1,0 +1,22 @@
+{
+  "add_prefix_space": true,
+  "backend": "tokenizers",
+  "bos_token": "[CLS]",
+  "clean_up_tokenization_spaces": true,
+  "cls_token": "[CLS]",
+  "eos_token": "[SEP]",
+  "errors": "replace",
+  "is_local": false,
+  "mask_token": "[MASK]",
+  "model_input_names": [
+    "input_ids",
+    "attention_mask"
+  ],
+  "model_max_length": 8192,
+  "model_specific_special_tokens": {},
+  "pad_token": "[PAD]",
+  "sep_token": "[SEP]",
+  "tokenizer_class": "TokenizersBackend",
+  "trim_offsets": true,
+  "unk_token": "[UNK]"
+}
