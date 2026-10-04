@@ -14,6 +14,7 @@ triage-poc-chsa/
 │   ├── relecture/             # Exports CSV de la file de relecture humaine (exporter_relecture.py)
 │   ├── sft/                   # Dataset SFT final (train.jsonl / validation.jsonl) — VERSIONNÉ (entrée du notebook Kaggle)
 │   └── dpo/                   # Paires de préférence (prompt / chosen / rejected) pour le DPO
+│   └── decideur/              # Dataset du décideur (complet/ et patient/), régénérable depuis data/sft/
 ├── src/
 │   ├── ingestion/
 │   │   ├── schema.py                    # Format commun de vignette normalisée
@@ -54,15 +55,24 @@ triage-poc-chsa/
 │   │   ├── preparer_dpo_rejected.py # Génère des réponses "rejected" avec le modèle SFT (température élevée)
 │   │   ├── fusionner_dpo.py         # Fusionne les sources de paires -> train_dpo.jsonl / validation_dpo.jsonl
 │   │   └── train_dpo.py             # DPO : fusion de l'adaptateur SFT + nouveau LoRA élargi
+│   ├── decideur/
+│   │   ├── preparer_dataset_decideur.py # Dialogues SFT -> transcriptions + label (variantes complet / patient)
+│   │   ├── train_decideur.py            # Entraînement + évaluation du classifieur (ModernCamemBERT-bio), IC 95 %
+│   │   └── evaluer_raccourci_style.py   # Test par paires minimales du biais « ton du patient » (jeux dev / contrôle)
 │   └── demo/
-│       └── app_demo.py              # Interface Gradio pour discuter avec l'agent entraîné
+│       ├── app_demo.py              # Interface Gradio : l'hôtesse mène l'entretien, le décideur tranche
+│       ├── decideur.py              # Plancher de sécurité (mots-clés) + décideur encodeur + journal d'audit
+│       └── decideur-patient/        # Modèle du décideur téléchargé depuis Kaggle (poids non versionnés)
 ├── tests/
 │   ├── test_red_flag_detector.py     # Étape 2 : seuils, pédiatrie, modulateurs, override
 │   ├── test_lot1.py                  # Lot 1 sans appel API (faux LLM) : croisement, planchers, file de relecture
 │   ├── test_etape5.py                # Étape 5 sans appel API (faux LLM) : contrôles, juge, reprise, ouverture/conclusion
 │   ├── test_prompt_agent.py          # Le prompt système est identique dans les datasets et à l'inférence
+│   ├── test_plancher.py              # Plancher de la démo : signes d'alerte, négations, formes atténuées, cas A/B/C
+│   ├── test_decideur_metriques.py    # Métriques du décideur : intervalles de Wilson, effectifs
 │   └── golden_etape1_extraction.json # Jeu de cas de référence (Étapes 1, 3, 4)
 ├── entrainement-sft-kaggle.ipynb  # Notebook d'entraînement SFT sur Kaggle (GPU T4)
+├── decideur_kaggle.ipynb          # Notebook d'entraînement du décideur sur Kaggle (variantes complet + patient)
 ├── run_pipeline.sh         # Script d'orchestration (ingestion + tests, option --avec-filtre)
 ├── sauvegarder_donnees.sh  # Sauvegarde horodatée de data/normalized/ et data/anonymized/
 ├── pytest.ini
@@ -485,6 +495,82 @@ l'adaptateur SFT dans le modèle de base avant d'ajouter un nouveau LoRA :
 l'adaptateur DPO enregistré ne s'utilise donc **pas** seul sur le modèle de
 base (utiliser `--merge-adapter` pour obtenir un modèle complet).
 
+Décideur de priorité
+Pourquoi un décideur séparé
+
+Testée en démo, l'hôtesse fine-tunée (SFT) mène correctement l'entretien mais choisit mal la priorité : la décision ne pèse que quelques tokens sur environ 140 par dialogue. La décision est donc confiée à un composant dédié :
+
+l'hôtesse (Qwen3-1.7B + LoRA) mène l'entretien, sa proposition de priorité est ignorée ;
+le plancher de sécurité (src/demo/decideur.py, règles par mots-clés, sans apprentissage) force l'urgence maximale dès qu'un signe d'alerte est décrit par le patient. Il est évalué à chaque message : un signe d'alerte arrête l'entretien ;
+le décideur (encodeur almanach/ModernCamemBERT-bio-v2-base, licence MIT, 150 M de paramètres, exécutable sur CPU) classe la conversation. Règle de prudence fixée avant la mesure : urgence maximale si P(urgence) ≥ 0,30, sinon la classe la plus probable ;
+la conclusion est choisie par le code et chaque décision est écrite dans le journal d'audit (source, signes détectés, probabilités).
+1. Préparer le dataset (local, sans GPU)
+bash
+python src/decideur/preparer_dataset_decideur.py
+
+Lit data/sft/train.jsonl et validation.jsonl, retire la conclusion de l'agent (qui contient la réponse), et écrit data/decideur/complet/ (agent + patient) et data/decideur/patient/ (messages du patient seuls). Contrôles : balise présente et cohérente, aucune fuite du label, aucun cas commun entre train et validation. Mesure aussi la longueur des transcriptions (maximum 701 tokens, d'où --max-length 768 à l'entraînement).
+
+2. Entraîner sur Kaggle (decideur_kaggle.ipynb)
+
+Créer un Dataset Kaggle contenant complet/, patient/ et train_decideur.py (le plus sûr : déposer une archive zip pour conserver les sous-dossiers) :
+
+bash
+cp src/decideur/train_decideur.py data/decideur/
+cd data/decideur && zip -r ../decideur.zip complet patient train_decideur.py
+
+Dans le notebook : accélérateur GPU, Internet activé. Avec un accélérateur « T4 x2 », forcer un seul GPU (CUDA_VISIBLE_DEVICES=0, déjà dans le notebook) : ModernBERT plante en mode multi-GPU (StopIteration).
+
+Règles posées avant la mesure : modèle de la dernière époque (pas de sélection du « meilleur » checkpoint), pas de pondération des classes. Chaque run écrit resultats_validation.json (métriques avec intervalles de confiance de Wilson à 95 %) et predictions_validation.jsonl. Récupérer l'archive decideur_resultats.zip (cellule 7) et dézipper decideur-patient/ dans src/demo/.
+
+3. Résultats sur la validation (107 dialogues, ~72 cas)
+
+Variante retenue : patient seul, avec le seuil de 0,30.
+
+Métrique	Résultat	IC 95 %
+Rappel urgence maximale	45/45	92 % – 100 %
+Rappel modérée	23/33	53 % – 83 %
+Rappel différée	24/29	65 % – 92 %
+Sous-triage	5/107	2 % – 10 %
+Exactitude	86 %	—
+
+Référence « toujours urgence » : 42 % d'exactitude. Limites : petit échantillon, pas de jeu de test indépendant, et choix de la variante fait sur cette même validation (chiffres légèrement optimistes).
+
+4. Biais connu : le ton du patient
+bash
+python src/decideur/evaluer_raccourci_style.py --jeu dev
+python src/decideur/evaluer_raccourci_style.py --jeu controle
+
+Test par paires minimales : chaque cas clinique est écrit deux fois, avec les mêmes faits, par un patient stressé puis par un patient qui minimise. Résultat : le décideur seul change de décision avec le ton sur 4 paires sur 10 (ex. déficit neurologique brutal minimisé classé « différée »). Cause : à l'Étape 5, le style du patient dépendait du niveau (STYLES[variante % 6] avec 1 / 2 / 3 variantes selon le niveau) — 100 % des urgences sont jouées par un patient stressé, et le style « minimise » n'existe qu'en « différée ».
+
+Sur le jeu de contrôle (jamais utilisé pour régler le plancher), la décision finale (plancher + décideur) reconnaît 11 urgences sur 12, sans déclencher le plancher sur aucun cas bénin. Urgence restante : une détresse respiratoire minimisée (« je respire un peu mal »). Le jeu dev a servi à corriger le plancher : son score (12/12) est optimiste par construction.
+
+⚠️ En l'état, une décision « différée » ne doit jamais être définitive sans validation humaine. -----8<-----
+
+Bloc 3 — Section « Démonstration »
+
+Remplacer tout le contenu de la section ## Démonstration (app_demo.py) (jusqu'à la ligne ⚠️ incluse) par :
+
+-----8<-----
+
+Démonstration (app_demo.py)
+
+Interface Gradio : l'hôtesse (base Qwen3-1.7B + adaptateur LoRA SFT) mène l'entretien avec le même prompt système et le même chat template qu'à l'entraînement ; la priorité est décidée par le plancher puis le décideur (voir « Décideur de priorité »).
+
+bash
+cd src/demo
+python3 app_demo.py --adapter-dir v4-qwen3-1.7b-triage-sft --decideur-dir decideur-patient
+# puis ouvrir http://127.0.0.1:7860
+
+Sans --decideur-dir, la démo revient à l'ancien fonctionnement (décision de l'hôtesse seule) : à réserver à la comparaison.
+
+Ce qui s'affiche dans le terminal : [triage] plancher déclenché : … quand un signe d'alerte arrête l'entretien, sinon [triage] catégorie proposée par l'hôtesse : … puis [triage] décision retenue : <niveau> (<source>) | <probabilités>. Sources possibles : plancher_immediat, plancher, decideur_seuil, decideur.
+
+Journal d'audit : chaque décision est ajoutée à src/demo/logs/decisions.jsonl (conversation, proposition de l'hôtesse, niveau retenu, source, signes détectés, probabilités, modèles utilisés). Ignoré par git : il contient les conversations. Avec des données réelles, ce journal relèverait d'un hébergement certifié HDS.
+
+Mémoire : sans GPU, Qwen est chargé en float32 (≈ 7 Go) en plus du décideur (≈ 0,6 Go). Prévoir au moins 8 à 10 Go de RAM libres (free -h), sinon le processus est tué par Linux (Killed). Fermer les applications lourdes (navigateur, VS Code / Pylance) avant de lancer.
+
+--share crée un lien public temporaire : à éviter pour une démo médicale.
+
 ## Démonstration (`app_demo.py`)
 
 Interface Gradio pour discuter avec l'agent entraîné (base Qwen3-1.7B +
@@ -542,22 +628,7 @@ pendant qu'un script de génération tourne encore en tâche de fond.
 `data/raw/` n'est volontairement pas sauvegardé : il est régénérable via les
 scripts d'ingestion.
 
-## Prochaines étapes
+test_plancher.py couvre le plancher de la démo (src/demo/decideur.py) : signes d'alerte francs et atténués, négations limitées au membre de phrase et au message, exception traumatique, combinaisons sur plusieurs messages, et les cas de référence A, B et C. Aucun modèle n'est chargé.
+test_decideur_metriques.py vérifie les intervalles de confiance de Wilson et les effectifs de train_decideur.py. Nécessite scikit-learn (le test est ignoré s'il n'est pas installé).
 
-1. Vérifier précisément le schéma du subset `oeq` de MediQAl (non encore
-   confirmé).
-2. Traiter la file de relecture humaine (`data/relecture/`) issue du premier
-   lot, et exclure/corriger les cas non relus avant de les utiliser pour
-   l'entraînement.
-3. Faire valider par un urgentiste les conclusions imposées par le code
-   (en particulier « urgence maximale » en contexte d'appel téléphonique) et
-   les modulateurs appliqués à la baisse.
-4. Étendre la couverture de tests aux modules `filtre_pertinence.py`,
-   `extraction_etape1.py`, `labellisation_etape3.py`,
-   `contre_validation_etape4.py` et `anonymiser_vignettes.py`.
-5. Évaluer le modèle entraîné (pas encore d'étape d'évaluation formalisée :
-   précision de la balise de priorité sur la validation, taux de
-   sous-triage) et itérer sur les hyperparamètres LoRA.
-6. DPO : relire les paires avant l'entraînement et régénérer les réponses
-   « rejected » avec le modèle SFT actuel (qui produit la balise de
-   priorité).
+Le test du biais de ton (evaluer_raccourci_style.py) n'est pas un test pytest : il charge le modèle du décideur et sert au diagnostic.
