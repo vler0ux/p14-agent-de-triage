@@ -1,0 +1,5 @@
+# Dépendances minimales des tests (CI GitHub Actions) : ni torch, ni transformers, ni SDK LLM.
+# Les modules testés importent ces bibliothèques lourdes à l'intérieur des fonctions seulement.
+pytest>=8.0.0
+python-dotenv>=1.0.0
+scikit-learn>=1.3.0   # test_decideur_metriques.py (installe aussi numpy)
