@@ -24,3 +24,30 @@ jobs:
         run: pip install -r requirements-ci.txt
       - name: Lancer les tests
         run: python -m pytest -v
+
+    
+  deploiement:
+    name: Déploiement sur le Space Hugging Face
+    needs: tests                     # seulement si tous les tests ont réussi
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:                     # jamais deux déploiements en même temps
+      group: deploiement-space
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer le client Hugging Face
+        run: pip install "huggingface_hub>=1.0"
+      - name: Assembler le Space (code copié depuis src/, source unique)
+        run: bash deploiement/assembler_space.sh
+      - name: Envoyer sur le Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: >
+          hf upload vler0ux/triage-chsa-demo build/space .
+          --repo-type space
+          --commit-message "Déploiement automatique depuis GitHub ${{ github.sha }}"
