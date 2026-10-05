@@ -1,5 +1,4 @@
 # Dépendances du Space (gradio et spaces sont préinstallés par Hugging Face sur ZeroGPU).
-torch
 transformers>=5.0.0
 peft>=0.12.0
 accelerate>=1.4.0
