@@ -16,7 +16,11 @@ Différences avec la démo locale :
 
 Ce fichier est assemblé avec le code du dépôt par deploiement/assembler_space.sh (source unique).
 """
-import spaces  # noqa: F401 — doit être importé avant torch sur ZeroGPU
+try:
+    import spaces  # ZeroGPU : doit être importé avant torch
+    GPU = spaces.GPU(duration=20)  # latence mesurée : 1 à 12 s par réponse
+except ImportError:  # GPU dédié (T4) : pas de ZeroGPU, la fonction s'exécute directement
+    GPU = lambda fonction: fonction
 
 import json
 import sys
@@ -48,9 +52,9 @@ if tokenizer.pad_token is None:
 # Même chat template qu'à l'entraînement (source unique : src/entrainement/template_triage.jinja)
 tokenizer.chat_template = (RACINE / "src" / "entrainement" / "template_triage.jinja").read_text(encoding="utf-8")
 
-modele_base = AutoModelForCausalLM.from_pretrained(MODELE_BASE, dtype=torch.bfloat16)
-# torch_device="cpu" : au démarrage, ZeroGPU simule un GPU ; sans cette option, PEFT tente de charger les
-# poids directement sur ce GPU inexistant (« No CUDA GPUs are available »). Le .to("cuda") est, lui, géré par ZeroGPU.
+# T4 (architecture Turing) : float16 ; bfloat16 n'y est pas pris en charge nativement.
+DTYPE = torch.float16 if os.environ.get("ACCELERATOR", "").startswith("t4") else torch.bfloat16
+modele_base = AutoModelForCausalLM.from_pretrained(MODELE_BASE, dtype=DTYPE)
 modele = PeftModel.from_pretrained(modele_base, DEPOT_HOTESSE, torch_device="cpu").to("cuda").eval()
 
 decideur = Decideur(snapshot_download(DEPOT_DECIDEUR))  # CPU
@@ -75,7 +79,7 @@ def journaliser(messages, niveau_hotesse, decision, latence_s=None):
     print("[audit] " + json.dumps(entree, ensure_ascii=False), flush=True)
 
 
-@spaces.GPU(duration=20)
+@GPU
 def generer(texte_entree):
     """Réponse de l'hôtesse (seule étape qui utilise le GPU)."""
     entrees = tokenizer(texte_entree, return_tensors="pt").to("cuda")
