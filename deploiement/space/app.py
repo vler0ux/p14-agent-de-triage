@@ -23,6 +23,7 @@ except ImportError:  # GPU dédié (T4) : pas de ZeroGPU, la fonction s'exécute
     GPU = lambda fonction: fonction
 
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
