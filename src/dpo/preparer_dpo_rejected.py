@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--train-file", required=True, help="train.jsonl (source des contextes ET des 'chosen')")
     parser.add_argument("--n", type=int, default=50)
     parser.add_argument("--tours-par-cas", type=int, default=2,
-                        help="Répliques du milieu de l'entretien tirées par cas, en plus de la conclusion"")
+                        help="Répliques du milieu de l'entretien tirées par cas, en plus de la conclusion")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--temperature", type=float, default=1.1,
                          help="0.8 : réponses plausibles, proches de celles du modèle en démo")
