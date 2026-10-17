@@ -130,11 +130,15 @@ def plancher(messages):
 # doute, le message passe à l'hôtesse : mieux vaut un hors-sujet toléré qu'un patient bloqué.
 RECADRAGE = ("Je suis le service de triage des urgences : je ne peux vous aider que sur votre "
              "état de santé. Quel est le motif de votre appel ?")
+# En cours d'entretien, redemander le motif sonnerait faux : on ramène aux symptômes.
+RECADRAGE_ENTRETIEN = ("Je suis le service de triage des urgences : je ne peux vous aider que sur "
+                       "votre état de santé. Revenons à vos symptômes.")
 ORIENTATION = "Si votre état de santé vous inquiète, rappelez-nous ou composez le 15."
 MAX_HORS_SUJET = 2  # au 2e message hors sujet d'affilée, on oriente au lieu de recadrer
 
 MOTS_HORS_DOMAINE = [
-    r"\bmeteo\b", r"quel temps", r"\b(pleuvoir|pleut|pluie|neige|orage)\b",          # météo
+    r"\bmeteo\b", r"quel temps", r"\b(pleuvoir|pleut|pluie|neige|orage|soleil)\b",   # météo
+    r"\b(fait|fera|va faire) (beau|moche|mauvais)\b", r"\b(beau|mauvais) temps\b",
     r"\b(match|score|foot(ball)?|rugby|championnat)\b",                                # sport
     r"\b(recette|gateau)\b",                                                            # cuisine
     r"\b(actualite|election|politique|president|bourse)\b",                            # actualité
@@ -162,10 +166,13 @@ def reponse_hors_sujet(messages):
     recadrages = 0
     for m in reversed(messages[:-1]):
         if m["role"] == "assistant":
-            if m["content"].strip() != RECADRAGE:
+            if m["content"].strip() not in (RECADRAGE, RECADRAGE_ENTRETIEN):
                 break
             recadrages += 1
-    return ORIENTATION if recadrages + 1 >= MAX_HORS_SUJET else RECADRAGE
+    if recadrages + 1 >= MAX_HORS_SUJET:
+        return ORIENTATION
+    debut_appel = not any(m["role"] == "user" for m in messages[:-1])
+    return RECADRAGE if debut_appel else RECADRAGE_ENTRETIEN
 
 
 class Decideur:

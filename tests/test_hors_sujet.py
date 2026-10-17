@@ -9,13 +9,16 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "demo"))
 from decideur import (  # noqa: E402
-    ORIENTATION, RECADRAGE, hors_sujet, plancher, reponse_hors_sujet,
+        ORIENTATION, RECADRAGE, RECADRAGE_ENTRETIEN, hors_sujet, plancher, reponse_hors_sujet,
 )
 
 
 # --- 1. Vrais hors sujet : bloqués -------------------------------------------------
 @pytest.mark.parametrize("message", [
     "Quel temps fera-t-il demain ?",
+    "Il fait beau demain ?",
+    "Il va faire beau ce week-end ?",
+    "Il y aura du soleil cet après-midi ?",
     "Tu sais s'il va pleuvoir ce week-end ?",
     "Qui a gagné le match de foot hier soir ?",
     "Tu peux me donner une recette de gâteau ?",
@@ -23,7 +26,7 @@ from decideur import (  # noqa: E402
     "Comment on écrit une boucle en Python ?",
 ])
 def test_hors_sujet_bloque(message):
-    assert hors_sujet(message)
+        assert hors_sujet(message)
 
 
 # --- 2. Messages médicaux contenant un mot piège : ils passent ----------------------
@@ -87,7 +90,26 @@ def test_compteur_remis_a_zero_apres_echange_medical():
         ("assistant", "Depuis quand avez-vous mal ?"),
         ("user", "Et qui a gagné le match ?"),
     )
-    assert reponse_hors_sujet(messages) == RECADRAGE
+    assert reponse_hors_sujet(messages) == RECADRAGE_ENTRETIEN
+
+def test_recadrage_en_cours_d_entretien():
+    messages = _conversation(
+        ("user", "J'ai très mal à la tête."),
+        ("assistant", "Depuis combien de temps avez-vous cette douleur ?"),
+        ("user", "Il fait beau demain ?"),
+    )
+    assert reponse_hors_sujet(messages) == RECADRAGE_ENTRETIEN
+
+
+def test_orientation_apres_recadrage_en_cours_d_entretien():
+    messages = _conversation(
+        ("user", "J'ai très mal à la tête."),
+        ("assistant", "Depuis combien de temps avez-vous cette douleur ?"),
+        ("user", "Tu connais le résultat du match ?"),
+        ("assistant", RECADRAGE_ENTRETIEN),
+        ("user", "Il fait beau demain ?"),
+    )
+    assert reponse_hors_sujet(messages) == ORIENTATION
 
 
 def test_orientation_mentionne_le_15():
