@@ -95,6 +95,7 @@ def normaliser(texte):
     texte = unicodedata.normalize("NFD", texte.lower().replace("’", "'"))
     return "".join(c for c in texte if unicodedata.category(c) != "Mn")
 
+
 def _present(motif, texte):
     """Vrai si le motif apparaît dans un membre de phrase sans négation qui le précède."""
     for membre in _COUPURES.split(texte):
@@ -120,6 +121,58 @@ def plancher(messages):
               if any(_present(m, texte) for m in motifs if not (trauma and m == _REGLE_IMPOTENCE))]
     signes += [nom for nom, (a, b) in COMBINAISONS.items() if _present(a, texte) and _present(b, texte)]
     return signes
+
+
+# Garde-fou de périmètre : un message hors du champ médical (météo, sport…) reçoit une phrase
+# fixe, choisie par le code, au lieu d'une réponse de l'hôtesse (qui n'a pas accès à Internet
+# et inventerait sa réponse). Double condition pour limiter les faux positifs : un mot hors
+# domaine ET aucun mot médical (« il fait chaud et j'ai la tête qui tourne » passe). En cas de
+# doute, le message passe à l'hôtesse : mieux vaut un hors-sujet toléré qu'un patient bloqué.
+RECADRAGE = ("Je suis le service de triage des urgences : je ne peux vous aider que sur votre "
+             "état de santé. Quel est le motif de votre appel ?")
+# En cours d'entretien, redemander le motif sonnerait faux : on ramène aux symptômes.
+RECADRAGE_ENTRETIEN = ("Je suis le service de triage des urgences : je ne peux vous aider que sur "
+                       "votre état de santé. Revenons à vos symptômes.")
+ORIENTATION = "Si votre état de santé vous inquiète, rappelez-nous ou composez le 15."
+MAX_HORS_SUJET = 2  # au 2e message hors sujet d'affilée, on oriente au lieu de recadrer
+
+MOTS_HORS_DOMAINE = [
+    r"\bmeteo\b", r"quel temps", r"\b(pleuvoir|pleut|pluie|neige|orage|soleil)\b",   # météo
+    r"\b(fait|fera|va faire) (beau|moche|mauvais)\b", r"\b(beau|mauvais) temps\b",
+    r"\b(match|score|foot(ball)?|rugby|championnat)\b",                                # sport
+    r"\b(recette|gateau)\b",                                                            # cuisine
+    r"\b(actualite|election|politique|president|bourse)\b",                            # actualité
+    r"\b(film|serie|musique|chanson|blague|jeu video)\b",                              # loisirs
+    r"\b(python|programmation|ordinateur|wifi|code informatique)\b",                   # informatique
+]
+MOTS_MEDICAUX = [
+    r"\bmal\b", r"douleur|douloureu", r"fievre|temperature", r"saign|\bsang\b", r"respir|tousse|\btoux\b",
+    r"vomi|nausee|diarrhee", r"blesse|coupe|plaie|brulure|piqu", r"gonfl|enfl", r"enceinte|grossesse",
+    r"malade|symptome|medicament|traitement", r"tourne|vertige|fatigu|glisse|tombe|chute",
+    r"\b(tete|ventre|poitrine|gorge|dos|bras|jambe|genou|cheville|main|pied|oeil|yeux)\b",
+]
+
+
+def hors_sujet(message):
+    """Vrai si le message sort du champ médical : un mot hors domaine ET aucun mot médical."""
+    texte = normaliser(message)
+    return (any(re.search(m, texte) for m in MOTS_HORS_DOMAINE)
+            and not any(re.search(m, texte) for m in MOTS_MEDICAUX))
+
+
+def reponse_hors_sujet(messages):
+    """Phrase fixe pour un message hors sujet : recadrage, puis orientation à partir du
+    MAX_HORS_SUJET-ième message hors sujet d'affilée (comptés via les recadrages de l'historique)."""
+    recadrages = 0
+    for m in reversed(messages[:-1]):
+        if m["role"] == "assistant":
+            if m["content"].strip() not in (RECADRAGE, RECADRAGE_ENTRETIEN):
+                break
+            recadrages += 1
+    if recadrages + 1 >= MAX_HORS_SUJET:
+        return ORIENTATION
+    debut_appel = not any(m["role"] == "user" for m in messages[:-1])
+    return RECADRAGE if debut_appel else RECADRAGE_ENTRETIEN
 
 
 class Decideur:

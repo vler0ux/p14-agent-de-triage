@@ -88,7 +88,6 @@ from contre_validation_etape4 import (  # noqa: E402
 VERSION_LOT = "lot1"
 MODELE_HAIKU = "claude-haiku-4-5-20251001"
 
-# Nom du modèle Groq : À VÉRIFIER dans ta console avant un gros lot.
 DEFAUTS = {
     "etape1": ("anthropic", MODELE_HAIKU),
     "etape3": ("anthropic", MODELE_HAIKU),

@@ -12,6 +12,9 @@ priorité : **urgence maximale**, **modérée** ou **différée**.
 - **le décideur** (ModernCamemBERT-bio, classifieur) choisit le niveau de
   priorité. La décision est retirée à l'hôtesse, qui décidait mal.
 
+Un **garde-fou de périmètre** (règles déterministes, après le plancher) répond
+par une phrase fixe aux messages hors du champ médical (météo, sport...).
+
 Chaque décision est journalisée (source, probabilités, modèles utilisés).
 
 > ⚠️ **Prototype de recherche, entraîné sur des données synthétiques.
@@ -85,15 +88,23 @@ triage-poc-chsa/
 │   │   └── train_sft.py             # Entraînement SFT (LoRA) de Qwen3-1.7B-Base
 │   ├── dpo/
 │   │   ├── preparer_dpo_rejected.py # Génère des réponses "rejected" avec le modèle SFT (température élevée)
+│   │   ├── defauts.py               # Détecteurs de défauts des répliques de l'hôtesse (règles simples, DPO v6)
+│   │   ├── filtrer_rejected.py      # DPO v6 : paires formées par les détecteurs de défauts
+│   │   ├── juger_paires_dpo.py      # DPO v6 : paires formées par un juge LLM (notes sur 5 critères, à l'aveugle)
+│   │   ├── relire_paires_dpo.py     # Relecture humaine à l'aveugle des paires, en terminal
+│   │   ├── remettre_en_relecture.py # Remet des paires déjà décidées dans la file de relecture
+│   │   ├── rattraper_desaccords.py  # Rattrapage ponctuel : paires en désaccord inversées (jugement humain)
 │   │   ├── fusionner_dpo.py         # Fusionne les sources de paires -> train_dpo.jsonl / validation_dpo.jsonl
 │   │   └── train_dpo.py             # DPO : fusion de l'adaptateur SFT + nouveau LoRA élargi
 │   ├── decideur/
 │   │   ├── preparer_dataset_decideur.py # Dialogues SFT -> transcriptions + label (variantes complet / patient)
 │   │   ├── train_decideur.py            # Entraînement + évaluation du classifieur (ModernCamemBERT-bio), IC 95 %
 │   │   └── evaluer_raccourci_style.py   # Test par paires minimales du biais « ton du patient » (jeux dev / contrôle)
+│   ├── analyse/
+│   │   └── part_tokens_decision.py  # Part des tokens de la balise de priorité dans les dialogues SFT (lecture seule)
 │   └── demo/
 │       ├── app_demo.py              # Interface Gradio : l'hôtesse mène l'entretien, le décideur tranche
-│       ├── decideur.py              # Plancher de sécurité (mots-clés) + décideur encodeur + journal d'audit
+│       ├── decideur.py              # Plancher de sécurité + garde-fou hors sujet + décideur encodeur + journal d'audit
 │       └── decideur-patient/        # Modèle du décideur téléchargé depuis Kaggle (poids non versionnés)
 ├── tests/
 │   ├── test_red_flag_detector.py     # Étape 2 : seuils, pédiatrie, modulateurs, override
@@ -101,16 +112,23 @@ triage-poc-chsa/
 │   ├── test_etape5.py                # Étape 5 sans appel API (faux LLM) : contrôles, juge, reprise, ouverture/conclusion
 │   ├── test_prompt_agent.py          # Le prompt système est identique dans les datasets et à l'inférence
 │   ├── test_plancher.py              # Plancher de la démo : signes d'alerte, négations, formes atténuées, cas A/B/C
+│   ├── test_hors_sujet.py            # Garde-fou de périmètre : hors sujet bloqués, mots pièges, recadrage/orientation
 │   ├── test_decideur_metriques.py    # Métriques du décideur : intervalles de Wilson, effectifs
+│   ├── test_defauts_dpo.py           # Détecteurs de défauts du DPO v6 (src/dpo/defauts.py)
+│   ├── test_juge_dpo.py              # Logique du juge LLM du DPO v6, sans appel API
 │   └── golden_etape1_extraction.json # Jeu de cas de référence (Étapes 1, 3, 4)
 ├── entrainement-sft-kaggle.ipynb  # Notebook d'entraînement SFT sur Kaggle (GPU T4)
 ├── notebook-decideur.ipynb        # Notebook d'entraînement du décideur sur Kaggle (variantes complet + patient)
 ├── entrainement_dpo_kaggle.ipynb  # Notebook d'entraînement DPO sur Kaggle
 ├── entrainement_dpo_v6_kaggle.ipynb  # Notebook d'entraînement DPO sur Kaggle (version 6)
+├── deploiement/
+│   ├── assembler_space.sh  # Assemble le code du Space Hugging Face à partir des sources testées
+│   └── space/              # app.py et requirements.txt propres au Space
 ├── run_pipeline.sh         # Script d'orchestration (ingestion + tests, option --avec-filtre)
 ├── sauvegarder_donnees.sh  # Sauvegarde horodatée de data/normalized/ et data/anonymized/
 ├── pytest.ini
 ├── requirements.txt
+├── requirements-ci.txt     # Dépendances minimales des tests (CI)
 ├── .env.example
 ├── docs/                      # Rapport technique, cas de test, article Taboulet 2019 (échelle FRENCH, PDF)
 └── .gitignore
@@ -523,6 +541,8 @@ traduites et relues (aucun effet observable), puis 1 844 paires issues des
 dialogues, notées par un LLM (bonnes métriques, mais conversation dégradée :
 le modèle ne conclut plus). L'hôtesse en service est le SFT seul.
 
+### Premier essai : paires UltraMedical + rejected du SFT
+
 ```bash
 # 1. Réponses "rejected" générées par le modèle SFT sur des contextes de train.jsonl
 cd src/dpo
@@ -555,11 +575,55 @@ l'adaptateur SFT dans le modèle de base avant d'ajouter un nouveau LoRA :
 l'adaptateur DPO enregistré ne s'utilise donc **pas** seul sur le modèle de
 base (utiliser `--merge-adapter` pour obtenir un modèle complet).
 
+La relecture humaine des paires se fait à l'aveugle (`relire_paires_dpo.py`) :
+les deux réponses sont affichées dans un ordre aléatoire, et la paire n'est
+validée que si le choix du relecteur coïncide avec le « chosen ».
+`remettre_en_relecture.py` remet des paires dans la file ; `rattraper_desaccords.py`
+est un correctif ponctuel (à lancer une seule fois).
+
+### DPO v6 : paires issues des dialogues
+
+Pour chaque contexte de `train.jsonl`, le SFT génère plusieurs réponses
+(`preparer_dpo_rejected.py`), puis les paires sont formées de l'une des deux
+façons suivantes :
+
+- **règles** (`filtrer_rejected.py`, sans GPU ni API) : le « rejected » est une
+  réponse générée qui présente un défaut détecté par `defauts.py` (vide,
+  artefact, langue, rassurance ou hypothèse diagnostique, plusieurs questions,
+  conclusion prématurée ou manquée...) ; le contexte est écarté si la réplique
+  de référence a elle-même un défaut ;
+- **juge LLM** (`juger_paires_dpo.py`, Gemini par défaut, ni Claude ni Qwen pour
+  limiter l'auto-préférence) : le juge reçoit l'appel complet et les réponses
+  candidates mélangées et anonymes (la référence peut donc être rejetée), les
+  note sur 5 critères et dit si elles sont sûres. Paire gardée seulement si
+  l'écart de notes est net (`--ecart-min`, 3 points sur 25). Reprise
+  automatique en cas d'interruption.
+
+```bash
+# paires par le juge LLM (essai sur 20 contextes, puis lot complet)
+python3 src/dpo/juger_paires_dpo.py --entree data/dpo/rejected_v6.jsonl \
+    --jugements data/dpo/jugements_v6_essai.jsonl --n 20
+python3 src/dpo/juger_paires_dpo.py --entree data/dpo/rejected_v6.jsonl \
+    --jugements data/dpo/jugements_v6.jsonl \
+    --paires data/dpo/paires_v6.jsonl --relecture data/dpo/paires_v6_a_relire.jsonl
+
+# ou paires par les règles
+python3 src/dpo/filtrer_rejected.py --entree data/dpo/rejected_v6.jsonl \
+    --sortie data/dpo/paires_v6.jsonl --relecture data/dpo/paires_v6_a_relire.jsonl
+
+# vérification à l'aveugle d'un échantillon
+python3 src/dpo/relire_paires_dpo.py data/dpo/paires_v6_a_relire.jsonl
+```
+
+Les paires obtenues passent ensuite par `fusionner_dpo.py` (`--rejected-sft`)
+et `train_dpo.py` ; l'entraînement a été fait sur Kaggle
+(`entrainement_dpo_v6_kaggle.ipynb`).
+
 ## Décideur de priorité
 
 ### Pourquoi un décideur séparé
 
-Testée en démo, l'hôtesse fine-tunée (SFT) mène correctement l'entretien mais choisit mal la priorité : sur 138 tokens appris par dialogue, la décision ne se joue que sur 1 ou 2. La décision est donc confiée à un composant dédié :
+Testée en démo, l'hôtesse fine-tunée (SFT) mène correctement l'entretien mais choisit mal la priorité : sur 138 tokens appris par dialogue, la décision ne se joue que sur 1 ou 2 (mesure : `python src/analyse/part_tokens_decision.py --fichier data/sft/train.jsonl`, CPU, lecture seule). La décision est donc confiée à un composant dédié :
 
 - l'hôtesse (Qwen3-1.7B + LoRA) mène l'entretien, sa proposition de priorité est ignorée ;
 - le plancher de sécurité (`src/demo/decideur.py`, règles par mots-clés, sans apprentissage) force l'urgence maximale dès qu'un signe d'alerte est décrit par le patient. Il est évalué à chaque message : un signe d'alerte arrête l'entretien ;
@@ -635,7 +699,9 @@ python3 app_demo.py --adapter-dir v4-qwen3-1.7b-triage-sft --decideur-dir decide
 
 Sans `--decideur-dir`, la démo revient à l'ancien fonctionnement (décision de l'hôtesse seule) : à réserver à la comparaison.
 
-Ce qui s'affiche dans le terminal : `[triage] plancher déclenché : …` quand un signe d'alerte arrête l'entretien, sinon `[triage] catégorie proposée par l'hôtesse : …` puis `[triage] décision retenue : <niveau> (<source>) | <probabilités>`. Sources possibles : `plancher_immediat`, `plancher`, `decideur_seuil`, `decideur`.
+**Garde-fou hors sujet** (`hors_sujet()` dans `decideur.py`) : un message hors du champ médical (météo, sport, cuisine, actualité, loisirs, informatique) reçoit une phrase fixe choisie par le code, sans appel à l'hôtesse (qui n'a pas accès à Internet et inventerait sa réponse). Double condition pour limiter les faux positifs : un mot hors domaine **et** aucun mot médical (« il neige, j'ai glissé et j'ai mal au dos » passe). Premier message hors sujet : recadrage ; au deuxième d'affilée : orientation (« rappelez-nous ou composez le 15 »). Le garde-fou est évalué **après** le plancher : une urgence passe toujours en premier. En cas de doute, le message va à l'hôtesse. Pour l'instant, il n'est branché que dans `app_demo.py` (pas encore dans `deploiement/space/app.py`).
+
+Ce qui s'affiche dans le terminal : `[triage] plancher déclenché : …` quand un signe d'alerte arrête l'entretien, `[perimetre] message hors sujet -> …` pour un message hors sujet, sinon `[triage] catégorie proposée par l'hôtesse : …` puis `[triage] décision retenue : <niveau> (<source>) | <probabilités>`. Sources possibles : `plancher_immediat`, `plancher`, `decideur_seuil`, `decideur`, `hors_sujet`.
 
 **Journal d'audit :** chaque décision est ajoutée à `src/demo/logs/decisions.jsonl` (conversation, proposition de l'hôtesse, niveau retenu, source, signes détectés, probabilités, modèles utilisés). Ignoré par git : il contient les conversations. Avec des données réelles, ce journal relèverait d'un hébergement certifié HDS.
 
@@ -647,9 +713,9 @@ Ce qui s'affiche dans le terminal : `[triage] plancher déclenché : …` quand 
 
 ## CI/CD (GitHub Actions)
 
-Chaque push sur `main` déclenche le workflow [`ci.yml`](.github/workflows/[ci.yml]) :
+Chaque push sur `main` déclenche le workflow [`ci.yml`](.github/workflows/ci.yml) :
 
-1. **Job « Tests »** : installe des dépendances allégées (`requirements-ci.txt`) et lance la suite pytest (178 tests : données, référentiel : données, référentiel FRENCH, plancher, métriques du décideur, prompts). Aucun appel API, aucun modèle chargé.
+1. **Job « Tests »** : installe des dépendances allégées (`requirements-ci.txt`) et lance la suite pytest (225 tests : données, référentiel FRENCH, plancher, garde-fou hors sujet, métriques du décideur, détecteurs et juge du DPO, prompts). Aucun appel API, aucun modèle chargé.
 2. **Job « Déploiement »** : ne démarre que si tous les tests passent. Le script [`deploiement/assembler_space.sh`](deploiement/assembler_space.sh) assemble le code du Space à partir des sources testées (aucune copie manuelle), puis le pousse sur Hugging Face avec la référence du commit d'origine.
 
 **Sécurité et robustesse :**
@@ -690,6 +756,15 @@ Aucun test ne fait d'appel API.
   signes d'alerte francs et atténués, négations limitées au membre de phrase et
   au message, exception traumatique, combinaisons sur plusieurs messages, et les
   cas de référence A, B et C. Aucun modèle n'est chargé.
+- `test_hors_sujet.py` couvre le garde-fou de périmètre : vrais hors sujet
+  bloqués, messages médicaux contenant un mot piège (« match », « recette »,
+  « neige ») qui passent, recadrage puis orientation, priorité du plancher.
+- `test_defauts_dpo.py` couvre les détecteurs de défauts du DPO v6
+  (`src/dpo/defauts.py`) : questions multiples, conclusion prématurée ou
+  manquée, rassurance et diagnostic, langue, artefacts.
+- `test_juge_dpo.py` couvre la logique du juge LLM (`juger_paires_dpo.py`) avec
+  des réponses prévues : doublons, mélange anonyme et reproductible, validation
+  de la réponse du juge, choix de la paire.
 - `test_decideur_metriques.py` vérifie les intervalles de confiance de Wilson et
   les effectifs de `train_decideur.py`. Nécessite scikit-learn (le test est
   ignoré s'il n'est pas installé).
