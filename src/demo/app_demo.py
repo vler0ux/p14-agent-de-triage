@@ -108,6 +108,8 @@ def main():
         from decideur import Decideur, plancher
         decideur = Decideur(args.decideur_dir)
         print(f"Décideur chargé : {args.decideur_dir}")
+    
+    from decideur import hors_sujet, reponse_hors_sujet
 
     chemin_journal = Path(args.journal)
     chemin_journal.parent.mkdir(parents=True, exist_ok=True)
@@ -165,6 +167,15 @@ def main():
             print(f"[triage] plancher déclenché : {decision['signes_alerte']} -> {decision['niveau']}")
             journaliser(messages, None, decision)
             return decision["conclusion"]
+        
+        # Garde-fou de périmètre, APRÈS le plancher : une urgence passe toujours en premier.
+        # La réponse est une phrase fixe, choisie par le code : l'hôtesse n'est pas appelée.
+        if hors_sujet(message):
+            reponse = reponse_hors_sujet(messages)
+            print(f"[perimetre] message hors sujet -> {reponse}")
+            journaliser(messages, None, {"niveau": None, "conclusion": reponse, "source": "hors_sujet",
+                                         "signes_alerte": [], "probas": None})
+            return reponse
 
         texte_entree = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
@@ -233,6 +244,7 @@ def main():
             "Bonjour, j'ai très mal à la poitrine depuis ce matin et j'ai du mal à respirer.",
             "Mon fils de 4 ans a de la fièvre depuis hier soir, 39 degrés.",
             "J'ai une petite coupure au doigt en cuisinant, ça saigne un peu.",
+            "Quel temps fera-t-il demain ?",
         ],
     )
     demo.launch(share=args.share)
