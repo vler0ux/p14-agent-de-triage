@@ -1,17 +1,18 @@
 """
-app.py — démo de l'agent de triage CHSA sur Hugging Face Spaces (ZeroGPU).
+app.py — démo de l'agent de triage CHSA sur Hugging Face Spaces (GPU T4 dédié).
 
 Même fonctionnement que src/demo/app_demo.py (démo locale) :
   1. l'hôtesse (Qwen3-1.7B-Base + adaptateur LoRA SFT) mène l'entretien ;
   2. le plancher de sécurité est évalué à CHAQUE message du patient : un signe d'alerte conclut tout de suite ;
   3. quand l'hôtesse veut conclure, sa proposition est ignorée : le décideur (encodeur) tranche, avec le
      plancher puis le seuil de prudence ; la phrase de conclusion est choisie par le code.
+  4. un message hors du domaine médical reçoit une phrase fixe de recadrage, sans appeler l'hôtesse.
 
 Différences avec la démo locale :
-  - les modèles sont téléchargés depuis le Hub (pas de dossiers locaux) ;
-  - ZeroGPU : un GPU n'est attribué que pendant la génération de l'hôtesse (fonction @spaces.GPU) ;
-    le décideur reste sur CPU ;
-  - le disque d'un Space n'est pas permanent : le journal d'audit est écrit dans les logs du Space
+    - les modèles sont téléchargés depuis le Hub (pas de dossiers locaux) ;
+    - l'hôtesse tourne sur le GPU, le décideur et les garde-fous sur CPU (le code reste compatible
+    ZeroGPU grâce à @spaces.GPU) ;
+    - le disque d'un Space n'est pas permanent : le journal d'audit est écrit dans les logs du Space
     (onglet « Logs »), une ligne JSON par décision. En production : stockage persistant certifié HDS.
 
 Ce fichier est assemblé avec le code du dépôt par deploiement/assembler_space.sh (source unique).
@@ -39,7 +40,7 @@ RACINE = Path(__file__).parent
 sys.path.insert(0, str(RACINE / "src" / "entrainement"))
 sys.path.insert(0, str(RACINE / "src" / "demo"))
 from prompt_agent import PROMPT_SYSTEME_AGENT as PROMPT_SYSTEME  # noqa: E402
-from decideur import Decideur, plancher  # noqa: E402
+from decideur import Decideur, hors_sujet, plancher, reponse_hors_sujet  # noqa: E402
 
 MODELE_BASE = "Qwen/Qwen3-1.7B-Base"
 DEPOT_HOTESSE = "vler0ux/qwen3-1.7b-triage-chsa-hotesse"
@@ -112,6 +113,14 @@ def repondre(message, historique):
         journaliser(messages, None, decision)
         return decision["conclusion"]
 
+    # Garde-fou de périmètre, APRÈS le plancher : une urgence passe toujours en premier.
+    # La réponse est une phrase fixe, choisie par le code : l'hôtesse n'est pas appelée.
+    if hors_sujet(message):
+        reponse = reponse_hors_sujet(messages)
+        journaliser(messages, None, {"niveau": None, "conclusion": reponse, "source": "hors_sujet",
+                                     "signes_alerte": [], "probas": None})
+        return reponse
+
     texte_entree = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     debut = time.perf_counter()
     reponse_brute = generer(texte_entree)
@@ -140,12 +149,13 @@ demo = gr.ChatInterface(
         "L'hôtesse (Qwen3-1.7B + LoRA) mène l'entretien ; la priorité est décidée par un plancher de sécurité "
         "puis un classifieur (ModernCamemBERT-bio). Une décision « différée » devrait toujours être validée par "
         "un soignant. Répondez au message d'accueil comme si vous étiez le patient. "
-        "GPU partagé (ZeroGPU) : quota de quelques minutes par jour et par visiteur."
+        "Si la question sort du domaine médical, l'agent recentre l'échange."
     ),
     examples=[
         "Bonjour, j'ai très mal à la poitrine depuis ce matin et j'ai du mal à respirer.",
         "Mon fils de 4 ans a de la fièvre depuis hier soir, 39 degrés.",
         "J'ai une petite coupure au doigt en cuisinant, ça saigne un peu.",
+        "Quel temps fera-t-il demain ?",
     ],
 )
 
